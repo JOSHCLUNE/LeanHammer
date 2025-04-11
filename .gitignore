@@ -1,0 +1,6 @@
+.lake
+/build
+/lake-packages
+/lean_packages
+/lakefile.olean
+.DS_Store
