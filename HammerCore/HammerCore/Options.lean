@@ -55,6 +55,8 @@ syntax (&"disableAuto") : Hammer.configOption
 syntax (&"disableAesop") : Hammer.configOption
 syntax (&"k1" " := " numLit) : Hammer.configOption -- The number of premises sent to `auto` (default: 16)
 syntax (&"k2" " := " numLit) : Hammer.configOption -- The number of premises sent to `aesop` (default: 32)
+syntax (&"aesopPremisePriority" " := " numLit) : Hammer.configOption -- The priority of premises sent to `aesop` (default: 20)
+syntax (&"aesopAutoPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `auto` within `aesop` (default: 10)
 
 structure ConfigurationOptions where
   solver : Solver
@@ -63,6 +65,8 @@ structure ConfigurationOptions where
   preprocessing : Preprocessing
   disableAuto : Bool
   disableAesop : Bool
+  aesopPremisePriority : Nat
+  aesopAutoPriority : Nat
   k1 : Nat -- The number of premises sent to `auto` (default: 16)
   k2 : Nat -- The number of premises sent to `aesop` (default: 32)
 
@@ -83,6 +87,8 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   let mut disableAesop := false
   let mut k1Opt := none
   let mut k2Opt := none
+  let mut aesopPremisePriorityOpt := none
+  let mut aesopAutoPriorityOpt := none
   for configOptionStx in configOptionsStx do
     match configOptionStx with
     | `(Hammer.configOption| solver := $solverName:Hammer.solverOption) =>
@@ -105,6 +111,12 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| k2 := $userK2:num) =>
       if k2Opt.isNone then k2Opt := some (TSyntax.getNat userK2)
       else throwError "Erroneous invocation of hammer: The k2 option has been specified multiple times"
+    | `(Hammer.configOption| aesopPremisePriority := $userAesopPremisePriority:num) =>
+      if aesopPremisePriorityOpt.isNone then aesopPremisePriorityOpt := some (TSyntax.getNat userAesopPremisePriority)
+      else throwError "Erroneous invocation of hammer: The aesopPremisePriority option has been specified multiple times"
+    | `(Hammer.configOption| aesopAutoPriority := $userAesopAutoPriority:num) =>
+      if aesopAutoPriorityOpt.isNone then aesopAutoPriorityOpt := some (TSyntax.getNat userAesopAutoPriority)
+      else throwError "Erroneous invocation of hammer: The aesopAutoPriority option has been specified multiple times"
     | _ => throwUnsupportedSyntax
   -- Set default values for options that were not specified
   let solver :=
@@ -125,8 +137,16 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match k2Opt with
     | none => 32
     | some k2 => k2
-  return {solver := solver, goalHypPrefix := goalHypPrefix, negGoalLemmaName := negGoalLemmaName, preprocessing := preprocessing,
-          disableAuto := disableAuto, disableAesop := disableAesop, k1 := k1, k2 := k2}
+  let aesopPremisePriority :=
+    match aesopPremisePriorityOpt with
+    | none => 20
+    | some aesopPremisePriority => aesopPremisePriority
+  let aesopAutoPriority :=
+    match aesopAutoPriorityOpt with
+    | none => 10
+    | some aesopAutoPriority => aesopAutoPriority
+  return {solver := solver, goalHypPrefix := goalHypPrefix, negGoalLemmaName := negGoalLemmaName, preprocessing := preprocessing, disableAuto := disableAuto,
+          disableAesop := disableAesop, k1 := k1, k2 := k2, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority}
 
 def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (configOptions : ConfigurationOptions) (x : m α) : m α :=
   match configOptions.solver with

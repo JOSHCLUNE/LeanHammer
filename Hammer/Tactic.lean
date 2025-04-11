@@ -17,8 +17,7 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
   else if configOptions.disableAesop then
     runHammerCore stxRef simpLemmas premises includeLCtx configOptions
   else if configOptions.disableAuto then
-    -- **TODO** Make this priority configurable
-    let aesopPremisePriority := 20
+    let aesopPremisePriority := configOptions.aesopPremisePriority
     let premises : Array Term := premises
     let aesopPremises := premises.take configOptions.k2
     let mut addIdentStxs : TSyntaxArray `Aesop.tactic_clause := #[]
@@ -28,9 +27,8 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
       evalTactic (← `(tactic| aesop? $addIdentStxs*))
   else
-    -- **TODO** Make these priorities configurable
-    let aesopAutoPriority := 10
-    let aesopPremisePriority := 20
+    let aesopAutoPriority := configOptions.aesopAutoPriority
+    let aesopPremisePriority := configOptions.aesopPremisePriority
     let premises : Array Term := premises
     let autoPremises := premises.take configOptions.k1
     let aesopPremises := premises.take configOptions.k2
@@ -39,7 +37,10 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       let pFeature ← `(Aesop.feature| $(mkIdent p.raw.getId):ident)
       addIdentStxs := addIdentStxs.push (← `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit aesopPremisePriority):num % $pFeature:Aesop.feature)))
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
-      evalTactic (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% (by hammerCore [$simpLemmas,*] [*, $(autoPremises),*]))))
+      if autoPremises.isEmpty then
+        evalTactic (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% (by hammerCore [$simpLemmas,*] [*]))))
+      else
+        evalTactic (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% (by hammerCore [$simpLemmas,*] [*, $(autoPremises),*]))))
 
 @[tactic hammer]
 def evalHammer : Tactic

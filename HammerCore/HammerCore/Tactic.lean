@@ -184,6 +184,7 @@ def runHammerCore (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser
           tryCatchRuntimeEx
             (getDuperCoreLemmas unsatCoreDerivLeafStrings premises goalDecls includeLCtx duperConfigOptions)
             throwDuperError
+        -- **TODO** `intros ...; apply Classical.byContradiction` is unecessary if everything in the goal will be sent to Duper
         -- Build the `intros ...` tactic with appropriate names
         let mut introsNames := #[] -- Can't just use `introNCoreNames` because `introNCoreNames` uses `_ as a placeholder
         let mut numGoalHyps := 0
