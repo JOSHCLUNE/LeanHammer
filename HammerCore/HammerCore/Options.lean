@@ -28,6 +28,7 @@ inductive Preprocessing where
 | simp_all
 | no_preprocessing
 | aesop
+deriving BEq
 
 open Solver Preprocessing
 
@@ -78,6 +79,15 @@ syntax (name := hammerCore) "hammerCore"
 
 macro_rules | `(tactic| hammerCore [$simpLemmas,*] [$facts,*]) => `(tactic| hammerCore [$simpLemmas,*] [$facts,*] {})
 
+/-- Checks to ensure that the set of given `configOptions` is usable. -/
+def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM Unit := do
+  if configOptions.disableAesop && configOptions.disableAuto then
+    throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
+  if configOptions.disableAesop && configOptions.preprocessing == Preprocessing.aesop then
+    throwError "Erroneous invocation of hammer: Preprocessing cannot be set to aesop when aesop is disabled"
+  if !configOptions.disableAesop && configOptions.preprocessing != Preprocessing.aesop then
+    throwError "Erroneous invocation of hammer: Preprocessing must be set to aesop when aesop is enabled"
+
 def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : TacticM ConfigurationOptions := do
   let mut solverOpt := none
   let mut goalHypPrefix := ""
@@ -127,7 +137,9 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   if negGoalLemmaName.isEmpty then negGoalLemmaName := "negGoal"
   let preprocessing :=
     match preprocessingOpt with
-    | none => Preprocessing.aesop
+    | none =>
+      if disableAesop then Preprocessing.simp_all
+      else Preprocessing.aesop
     | some preprocessing => preprocessing
   let k1 :=
     match k1Opt with
@@ -145,8 +157,11 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match aesopAutoPriorityOpt with
     | none => 10
     | some aesopAutoPriority => aesopAutoPriority
-  return {solver := solver, goalHypPrefix := goalHypPrefix, negGoalLemmaName := negGoalLemmaName, preprocessing := preprocessing, disableAuto := disableAuto,
-          disableAesop := disableAesop, k1 := k1, k2 := k2, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority}
+  let configOptions :=
+    {solver := solver, goalHypPrefix := goalHypPrefix, negGoalLemmaName := negGoalLemmaName, preprocessing := preprocessing, disableAuto := disableAuto,
+     disableAesop := disableAesop, k1 := k1, k2 := k2, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority}
+  validateConfigOptions configOptions
+  return configOptions
 
 def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (configOptions : ConfigurationOptions) (x : m α) : m α :=
   match configOptions.solver with

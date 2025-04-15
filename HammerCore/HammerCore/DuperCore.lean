@@ -53,7 +53,7 @@ def getDuperCoreLemmas (unsatCoreDerivLeafStrings : Array String) (userFacts : S
       -- **TODO** Write a variant of `runDuperPortfolioMode` that returns the list of facts that were used to reconstruct the proof (current approach is brittle)
       if (← inferType decl.type).isProp && prf.containsFVar decl.fvarId then
         lctxFactsInProof := lctxFactsInProof.push decl.fvarId
-  -- Determine which of the non-lctx facts that were passed into `querySMT`/`hammer` appear in `prf`
+  -- Determine which of the non-lctx facts that were passed into `hammer` appear in `prf`
   let mut userInputFactsInProof := #[]
   for factStx in userFacts do
     -- **TODO** Write a variant of `runDuperPortfolioMode` that returns the list of facts that were used to reconstruct the proof (current approach is brittle)
