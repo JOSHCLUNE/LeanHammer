@@ -47,15 +47,18 @@ def evalHammer : Tactic
 | `(tactic| hammer%$stxRef {$configOptions,*}) => withMainContext do
   let goal ← getMainGoal
   let configOptions ← parseConfigOptions configOptions
+  let maxSuggestions := max configOptions.k1 configOptions.k2
   let premiseSelectionConfig : PremiseSelection.Config := {
-    maxSuggestions := max configOptions.k1 configOptions.k2,
+    maxSuggestions := maxSuggestions,
     caller := `hammer
   }
   -- Get the registered premise selector for premise selection.
   -- If none registered, then use the cloud premise selector by default.
   let selector := premiseSelectorExt.getState (← getEnv)
   let selector := selector.getD Cloud.premiseSelector
-  let premises ← selector goal premiseSelectionConfig
+  let premises ←
+    if maxSuggestions == 0 then pure #[] -- If `maxSuggestions` is 0, then we don't need to waste time calling the premise selector
+    else selector goal premiseSelectionConfig
   let premises := premises.map (fun p => p.name)
   let premises ← premises.mapM (fun p => return (← `(term| $(mkIdent p))))
   trace[hammer.debug] "premises: {premises}"
