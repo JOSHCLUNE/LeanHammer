@@ -21,11 +21,14 @@ def unsatCoreIncludesFact (unsatCoreDerivLeafStrings : Array String) (fact : Ter
         pure $ factStrStx == s!"{fact}"
     )
 
+/- **TODO** If `Duper.formulasToAutoLemmas` were modified to include identifier information for fVarIds from the local context (rather than just include identifier
+   information to track facts explicitly passed in as terms), then we could use Zipperposition's unsat core to also minimize the set of lctx facts that are sent to Duper
+   (potentially improving `hammer`'s performance on problems with very large local contexts). This behavior should maybe be added as an option (since even if it improves
+   `hammer`'s performance on some problems, it will increase the size of the suggested Duper invocations on all problems), but I definitely think this is worth implementing. -/
 /-- **TODO** Write docstring -/
 def getDuperCoreLemmas (unsatCoreDerivLeafStrings : Array String) (userFacts : Syntax.TSepArray `term ",") (goalDecls : Array LocalDecl)
-  (includeAllLctx : Bool) (duperConfigOptions : Duper.ConfigurationOptions) : TacticM (Array FVarId × Array Term × Expr) := do
+  (includeAllLctx : Bool) (duperConfigOptions : Duper.ConfigurationOptions) : TacticM (Array Term × Expr) := do
   Core.checkSystem s!"{decl_name%}"
-  let lctx ← getLCtx
   -- Filter `userFacts` to only include facts that appear in the extnernal prover's unsat core
   let userFacts : Array Term := userFacts
   let mut coreUserFacts := #[]
@@ -44,22 +47,13 @@ def getDuperCoreLemmas (unsatCoreDerivLeafStrings : Array String) (userFacts : S
     catch e =>
       throwError m!"{decl_name%} :: Unable to use hints from external solver to reconstruct proof. " ++
                   m!"Duper threw the following error:\n\n{e.toMessageData}"
-  -- Find `lctxFactsInProof`
-  let mut lctxFactsInProof := #[]
-  for declOpt in lctx.decls do
-    match declOpt with
-    | none => continue
-    | some decl =>
-      -- **TODO** Write a variant of `runDuperPortfolioMode` that returns the list of facts that were used to reconstruct the proof (current approach is brittle)
-      if (← inferType decl.type).isProp && prf.containsFVar decl.fvarId then
-        lctxFactsInProof := lctxFactsInProof.push decl.fvarId
-  -- Determine which of the non-lctx facts that were passed into `hammer` appear in `prf`
+  -- Determine which of the user provided facts appear in `prf`
   let mut userInputFactsInProof := #[]
   for factStx in userFacts do
     -- **TODO** Write a variant of `runDuperPortfolioMode` that returns the list of facts that were used to reconstruct the proof (current approach is brittle)
     let factName := factStx.raw.getId
     if containsConst prf (fun n => n == factName) then
       userInputFactsInProof := userInputFactsInProof.push factStx
-  pure (lctxFactsInProof, userInputFactsInProof, prf)
+  pure (userInputFactsInProof, prf)
 
 end HammerCore

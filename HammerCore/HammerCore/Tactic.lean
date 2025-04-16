@@ -138,7 +138,7 @@ def runHammerCore (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser
       numGoalHyps := numGoalHyps + 1
     else -- If fvarId corresponds to a non-sort type, then introduce it using the userName
       introNCoreNames := introNCoreNames.push `_ -- `introNCore` will overwrite this with the existing binder name
-  let (goalBinders, newGoal) ← introNCore originalMainGoal numBinders introNCoreNames.toList true true
+  let (_, newGoal) ← introNCore originalMainGoal numBinders introNCoreNames.toList true true
   let [nngoal] ← newGoal.apply (.const ``Classical.byContradiction [])
     | throwError "evalHammer :: Unexpected result after applying Classical.byContradiction"
   let (_, absurd) ← MVarId.intro nngoal (.str .anonymous configOptions.negGoalLemmaName)
@@ -180,39 +180,26 @@ def runHammerCore (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser
         let duperConfigOptions :=
           { portfolioMode := true, portfolioInstance := none, inhabitationReasoning := none, includeExpensiveRules := none,
             preprocessing := some PreprocessingOption.FullPreprocessing, selFunction := none }
-        let (coreLctxLemmas, coreUserInputFacts, duperProof) ←
+        let (coreUserInputFacts, duperProof) ←
           tryCatchRuntimeEx
             (getDuperCoreLemmas unsatCoreDerivLeafStrings premises goalDecls includeLCtx duperConfigOptions)
             throwDuperError
-        -- **TODO** `intros ...; apply Classical.byContradiction` is unecessary if everything in the goal will be sent to Duper
-        -- Build the `intros ...` tactic with appropriate names
-        let mut introsNames := #[] -- Can't just use `introNCoreNames` because `introNCoreNames` uses `_ as a placeholder
-        let mut numGoalHyps := 0
-        for fvarId in goalBinders do
-          let some localDecl := lctxAfterIntros.fvarIdToDecl.find? fvarId
-            | throwProofFitError $ ← throwError "Unable to find fvarId {Expr.fvar fvarId} in local context (after intros)"
-          let ty := localDecl.type
-          if (← inferType ty).isProp then
-            introsNames := introsNames.push (.str .anonymous (configOptions.goalHypPrefix ++ numGoalHyps.repr))
-            numGoalHyps := numGoalHyps + 1
-          else -- If fvarId corresponds to a non-sort type, then introduce it using the userName
-            introsNames := introsNames.push $ Name.eraseMacroScopes localDecl.userName
-        let ids : TSyntaxArray [`ident, `Lean.Parser.Term.hole] := introsNames.map (fun n => mkIdent n)
-        if ids.size > 0 then
-          tacticsArr := tacticsArr.push $ ← `(tactic| intros $ids*)
-        -- Add `apply Classical.byContradiction` so that the unsat core can determine whether the target needs to be included in the call
-        let byContradictionConst : TSyntax `term ← PrettyPrinter.delab $ mkConst ``Classical.byContradiction
-        tacticsArr := tacticsArr.push $ ← `(tactic| apply $byContradictionConst)
-        -- Introduce the negated hypothesis (again, so that the unsat core can determine whether the target needs to be included in the call)
-        tacticsArr := tacticsArr.push $ ← `(tactic| intro $(mkIdent (.str .anonymous configOptions.negGoalLemmaName)):term)
-        -- Build a Duper call using each coreLctxLemma and each coreUserInputFact
-        let coreLctxLemmaIds ← coreLctxLemmas.mapM
-          (fun lemFVarId => withOptions ppOptionsSetting $ PrettyPrinter.delab (.fvar lemFVarId))
-        let coreUserInputFacts := coreUserInputFacts.filter (fun x => !coreLctxLemmaIds.contains x)
-        tacticsArr := tacticsArr.push $ ← `(tactic| duper [$(coreLctxLemmaIds ++ coreUserInputFacts),*] {preprocessing := full})
+        -- Build a Duper call using each coreLctxLemma each coreUserInputFact
+        -- **TODO** Add a setting that allows Duper to use Zipperposition's unsat core for lctx facts as well (not just user provided facts)
+        if coreUserInputFacts.size > 0 && includeLCtx then
+          tacticsArr := tacticsArr.push $ ← `(tactic| duper [*, $(coreUserInputFacts),*] {preprocessing := full})
+        else if coreUserInputFacts.size > 0 && !includeLCtx then
+          tacticsArr := tacticsArr.push $ ← `(tactic| duper [$(coreUserInputFacts),*] {preprocessing := full})
+        else if coreUserInputFacts.size == 0 && includeLCtx then
+          tacticsArr := tacticsArr.push $ ← `(tactic| duper [*] {preprocessing := full})
+        else -- coreUserInputFacts.size == 0 && !includeLCtx
+          tacticsArr := tacticsArr.push $ ← `(tactic| duper {preprocessing := full})
+
         -- Add tactic sequence suggestion
         let tacticSeq ← `(tacticSeq| $tacticsArr*)
-        -- **TODO** Add a warning if anything gets inadvertently shadowed (e.g. by `negGoal` or an introduced goal hypothesis)
+        /- **TODO** Add a warning if anything gets inadvertently shadowed (e.g. by `negGoal` or an introduced goal hypothesis)
+           Currently, this can't happen because Zipperposition's unsat core is not minimizing the set of lctx facts that are sent to Duper,
+           but a warning will need to be added once that functionality is implemented. -/
         addTryThisTacticSeqSuggestion stxRef tacticSeq (← getRef)
         tryCatchRuntimeEx
           (absurd.assign duperProof)
