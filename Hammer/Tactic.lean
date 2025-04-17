@@ -14,32 +14,24 @@ macro_rules
 | `(tactic| hammer {$configOptions,*}) => `(tactic| hammer [] {$configOptions,*}) -- Config options only
 
 def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
-  (premises : TSepArray `term ",") (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit := withMainContext do
+  (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit := withMainContext do
+  let aesopAutoPriority := configOptions.aesopAutoPriority
+  let aesopPremisePriority := configOptions.aesopPremisePriority
+  let autoPremises := userInputTerms ++ premises.take configOptions.k1
+  let aesopPremises := userInputTerms ++ premises.take configOptions.k2
+  let mut addIdentStxs : TSyntaxArray `Aesop.tactic_clause := #[]
+  for p in aesopPremises do
+    -- **TODO** Add support for terms that aren't just names of premises
+    let pFeature ← `(Aesop.feature| $(mkIdent p.raw.getId):ident)
+    addIdentStxs := addIdentStxs.push (← `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit aesopPremisePriority):num % $pFeature:Aesop.feature)))
   if configOptions.disableAesop && configOptions.disableAuto then
     throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
   else if configOptions.disableAesop then
-    runHammerCore stxRef simpLemmas premises includeLCtx configOptions
+    runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
   else if configOptions.disableAuto then
-    let aesopPremisePriority := configOptions.aesopPremisePriority
-    let premises : Array Term := premises
-    let aesopPremises := premises.take configOptions.k2
-    let mut addIdentStxs : TSyntaxArray `Aesop.tactic_clause := #[]
-    for p in aesopPremises do
-      let pFeature ← `(Aesop.feature| $(mkIdent p.raw.getId):ident)
-      addIdentStxs := addIdentStxs.push (← `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit aesopPremisePriority):num % $pFeature:Aesop.feature)))
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
       evalTactic (← `(tactic| aesop? $addIdentStxs*))
   else
-    let aesopAutoPriority := configOptions.aesopAutoPriority
-    let aesopPremisePriority := configOptions.aesopPremisePriority
-    let premises : Array Term := premises
-    let autoPremises := premises.take configOptions.k1
-    let aesopPremises := premises.take configOptions.k2
-    let mut addIdentStxs : TSyntaxArray `Aesop.tactic_clause := #[]
-    for p in aesopPremises do
-      -- **TODO** Add support for terms that aren't just names of premises
-      let pFeature ← `(Aesop.feature| $(mkIdent p.raw.getId):ident)
-      addIdentStxs := addIdentStxs.push (← `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit aesopPremisePriority):num % $pFeature:Aesop.feature)))
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
       if autoPremises.isEmpty then
         evalTactic (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% (by hammerCore [$simpLemmas,*] [*]))))
@@ -69,7 +61,7 @@ def evalHammer : Tactic
   let premises ← premises.mapM (fun p => return (← `(term| $(mkIdent p))))
   trace[hammer.debug] "premises from premise selector: {premises}"
   trace[hammer.debug] "user input terms: {userInputTerms}"
-  runHammer stxRef ∅ (userInputTerms ++ premises) true configOptions
+  runHammer stxRef ∅ userInputTerms premises true configOptions
 | _ => throwUnsupportedSyntax
 
 end Hammer
