@@ -51,6 +51,7 @@ def getDuperCoreLemmas (unsatCoreDerivLeafStrings : Array String) (userFacts : S
   let mut userInputFactsInProof := #[]
   for factStx in userFacts do
     -- **TODO** Write a variant of `runDuperPortfolioMode` that returns the list of facts that were used to reconstruct the proof (current approach is brittle)
+    -- **TODO** Add support for userFacts that aren't just names of premises (e.g. `(by omega : 1 + 1 = 2)`)
     let factName := factStx.raw.getId
     if containsConst prf (fun n => n == factName) then
       userInputFactsInProof := userInputFactsInProof.push factStx
