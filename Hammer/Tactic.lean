@@ -2,7 +2,7 @@ import HammerCore
 import PremiseSelection
 import Aesop
 
-open Lean Elab Tactic HammerCore Syntax PremiseSelection
+open Lean Elab Tactic HammerCore Syntax PremiseSelection Duper Aesop
 
 namespace Hammer
 
@@ -11,7 +11,7 @@ syntax (name := hammer) "hammer" (ppSpace "{"Hammer.configOption,*,?"}")? : tact
 macro_rules | `(tactic| hammer) => `(tactic| hammer {})
 
 def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
-  (premises : TSepArray `term ",") (includeLCtx : Bool) (configOptions : ConfigurationOptions) : TacticM Unit := withMainContext do
+  (premises : TSepArray `term ",") (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit := withMainContext do
   if configOptions.disableAesop && configOptions.disableAuto then
     throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
   else if configOptions.disableAesop then
@@ -41,6 +41,7 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
         evalTactic (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% (by hammerCore [$simpLemmas,*] [*]))))
       else
         evalTactic (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% (by hammerCore [$simpLemmas,*] [*, $(autoPremises),*]))))
+      -- **TODO** Trying to find a way to integrate `hammerCoreTacGen`
 
 @[tactic hammer]
 def evalHammer : Tactic

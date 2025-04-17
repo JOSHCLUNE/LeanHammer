@@ -184,7 +184,7 @@ def runHammerCore (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser
           tryCatchRuntimeEx
             (getDuperCoreLemmas unsatCoreDerivLeafStrings premises goalDecls includeLCtx duperConfigOptions)
             throwDuperError
-        -- Build a Duper call using each coreLctxLemma each coreUserInputFact
+        -- Build a Duper call using includeLCtx and each coreUserInputFact
         -- **TODO** Add a setting that allows Duper to use Zipperposition's unsat core for lctx facts as well (not just user provided facts)
         if coreUserInputFacts.size > 0 && includeLCtx then
           tacticsArr := tacticsArr.push $ ← `(tactic| duper [*, $(coreUserInputFacts),*] {preprocessing := full})
