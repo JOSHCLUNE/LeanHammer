@@ -42,6 +42,7 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
 @[tactic hammer]
 def evalHammer : Tactic
 | `(tactic| hammer%$stxRef [$userInputTerms,*] {$configOptions,*}) => withMainContext do
+  withOptions (fun o => o.set `linter.deprecated false) do
   let goal ← getMainGoal
   let userInputTerms : Array Term := userInputTerms
   let configOptions ← parseConfigOptions configOptions
@@ -59,8 +60,10 @@ def evalHammer : Tactic
     else selector goal premiseSelectionConfig
   let premises := premises.map (fun p => p.name)
   let premises ← premises.mapM (fun p => return (← `(term| $(mkIdent p))))
-  trace[hammer.debug] "premises from premise selector: {premises}"
   trace[hammer.debug] "user input terms: {userInputTerms}"
+  trace[hammer.debug] "premises from premise selector: {premises}"
+  let premises := premises.filter (fun p => !userInputTerms.contains p) -- Remove duplicates between `userInputTerms` and `premises`
+  trace[hammer.debug] "premises from premise selector after removing duplicates in user input terms: {premises}"
   runHammer stxRef ∅ userInputTerms premises true configOptions
 | _ => throwUnsupportedSyntax
 
