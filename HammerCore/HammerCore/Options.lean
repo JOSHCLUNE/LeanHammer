@@ -22,13 +22,14 @@ syntax "aesop" : Hammer.preprocessing -- Corresponds to integrating with `aesop`
 inductive Solver where
 | zipperposition
 | cvc5
+deriving ToExpr
 
 inductive Preprocessing where
 | simp_target
 | simp_all
 | no_preprocessing
 | aesop
-deriving BEq
+deriving BEq, ToExpr
 
 open Solver Preprocessing
 
@@ -70,6 +71,7 @@ structure ConfigurationOptions where
   aesopAutoPriority : Nat
   k1 : Nat -- The number of premises sent to `auto` (default: 16)
   k2 : Nat -- The number of premises sent to `aesop` (default: 32)
+deriving ToExpr
 
 syntax hammerStar := "*"
 syntax (name := hammerCore) "hammerCore"

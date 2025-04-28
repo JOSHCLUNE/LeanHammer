@@ -1,24 +1,24 @@
 import HammerCore.Tactic
 import Aesop
 
-open Lean Meta Parser Elab Tactic Auto Duper Syntax
+open Lean Meta Parser Elab Tactic Auto Duper Syntax Aesop
 
 namespace HammerCore
 
-/-- `hammerCoreTacGen` takes in `formulas` selected by premise selection or directly provided by the user, uses Lean-auto/Zipperposition to attempt to
-    solve the input `goalMVarId` with `formulas` (and all facts in the local context if `includeLCtx` is enabled), and either returns an empty array
-    (if Lean-auto/Zipperposition fail) or returns a singleton array containing the string of a Duper call including just the terms that appear in the
-    subset of `formulas` that appears in Lean-auto/Zipperposition's unsat core.
+/-- Constructs a `SingleRuleTac` that uses Lean-auto/Zipperposition to attempt to solve the input goal with `formulas` (and all facts in the local context
+    if `includeLCtx` is enabled), and either throws an error (if Lean-auto/Zipperposition fail) or suggests a Duper invocation using the subset of `formulas`
+    that Zipperposition used to find a proof.
 
     **TODO** Currently, Zipperposition's unsat core is not used to minimize the set of formulas from the local context that are sent to Duper, but in
     the future, this behavior should be added as an option (it should theoretically improve the strength of some suggested Duper invocations at the cost
     of increasing the size of all suggested Duper invocations). -/
-def hammerCoreTacGen (formulas : List (Expr × Expr × Array Name × Bool × Term))
-  (includeLCtx : Bool) (configOptions : ConfigurationOptions) : Aesop.TacGen := fun goalMVarId => do
-  goalMVarId.withContext do
+def hammerCoreSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool × String))
+  (includeLCtx : Bool) (configOptions : ConfigurationOptions) : SingleRuleTac := λ input => do
+  let preState ← saveState
+  input.goal.withContext do
     Core.checkSystem s!"{decl_name%}"
     let lctxBeforeIntros ← getLCtx
-    let originalMainGoal := goalMVarId
+    let originalMainGoal := input.goal
     let goalType ← originalMainGoal.getType
     let goalType ← instantiateMVars goalType
     -- If `goalType` has the form `∀ x1 : t1, … ∀ xn : tn, b`, first apply `intros` to put `x1 … xn` in the local context
@@ -26,9 +26,9 @@ def hammerCoreTacGen (formulas : List (Expr × Expr × Array Name × Bool × Ter
     let mut introNCoreNames : Array Name := #[]
     let mut numGoalHyps := 0
     /- Assuming `goal` has the form `∀ x1 : t1, ∀ x2 : t2, … ∀ xn : tn, b`, `goalPropHyps` is
-      an array of size `n` where the mth element in `goalPropHyps` indicates whether the mth forall
-      binder has a `Prop` type. This is used to help create `introNCoreNames` which should use existing
-      binder names for nonProp arguments and newly created names (based on `goalHypPrefix`) for Prop arguments -/
+       an array of size `n` where the mth element in `goalPropHyps` indicates whether the mth forall
+       binder has a `Prop` type. This is used to help create `introNCoreNames` which should use existing
+       binder names for nonProp arguments and newly created names (based on `goalHypPrefix`) for Prop arguments -/
     let goalPropHyps ← forallTelescope goalType fun xs _ => do xs.mapM (fun x => do pure (← inferType (← inferType x)).isProp)
     for b in goalPropHyps do
       if b then
@@ -46,10 +46,17 @@ def hammerCoreTacGen (formulas : List (Expr × Expr × Array Name × Bool × Ter
       -- **NOTE** We collect `lctxFormulas` using `Duper.collectAssumptions` rather than `Auto.collectAllLemmas` because `Auto.collectAllLemmas`
       -- does not currently support a mode where unusable facts are ignored.
       let lctxFormulas ← withDuperOptions $ collectLCtxAssumptions goalDecls
-      let lctxFormulas := lctxFormulas.filter (fun (fact, _, _, _, _) => !formulas.any (fun (f, _, _, _, _) => f == fact))
+      let lctxFormulas := lctxFormulas.filterMap
+        (fun (fact, proof, params, isFromGoal, stxOpt) =>
+          if formulas.any (fun (f, _, _, _, _) => f == fact) then none
+          else
+            match stxOpt with
+            | none => some (fact, proof, params, isFromGoal, none)
+            | some stx => some (fact, proof, params, isFromGoal, some s!"{stx}")
+        )
       let formulas := (formulas.map (fun (fact, proof, params, isFromGoal, stxOpt) => (fact, proof, params, isFromGoal, some stxOpt))) ++ lctxFormulas
       withSolverOptions configOptions do
-        let lemmas ← formulasToAutoLemmas formulas (includeInSetOfSupport := true)
+        let lemmas ← formulasWithStringsToAutoLemmas formulas (includeInSetOfSupport := true)
         -- Calling `Auto.unfoldConstAndPreprocessLemma` is an essential step for the monomorphization procedure
         let lemmas ←
           tryCatchRuntimeEx
@@ -72,22 +79,35 @@ def hammerCoreTacGen (formulas : List (Expr × Expr × Array Name × Bool × Ter
                 throwTranslationError e
             )
         match configOptions.solver with
+        | Solver.cvc5 => throwError "evalHammer :: cvc5 support not yet implemented"
         | Solver.zipperposition =>
           let unsatCoreDerivLeafStrings := solverHints.1
           trace[hammer.debug] "unsatCoreDerivLeafStrings: {unsatCoreDerivLeafStrings}"
           -- Collect all formulas that appear in the unsat core and have a `stxOpt`
           -- **TODO** Add a setting that allows Duper to use Zipperposition's unsat core for lctx facts as well (not just user provided facts)
           let coreFormulas := formulas.filterMap
-            (fun (_, _, _, _, stxOpt) => stxOpt.filter (fun stx => unsatCoreIncludesFact unsatCoreDerivLeafStrings stx))
+            (fun (_, _, _, _, stxOpt) => stxOpt.filter (fun stx => unsatCoreIncludesFactAsString unsatCoreDerivLeafStrings stx))
+          let coreFormulas := coreFormulas.map (fun s => Lean.mkIdent s.toName) -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
           -- Build a Duper call using includeLCtx and each coreUserInputFact
-          if !coreFormulas.isEmpty && includeLCtx then
-            return #[(s!"{← `(tactic| duper [*, $(coreFormulas.toArray),*] {preprocessing := full})}", 1.0)]
-          else if !coreFormulas.isEmpty && !includeLCtx then
-            return #[(s!"{← `(tactic| duper [$(coreFormulas.toArray),*] {preprocessing := full})}", 1.0)]
-          else if coreFormulas.isEmpty && includeLCtx then
-            return #[(s!"{← `(tactic| duper [*] {preprocessing := full})}", 1.0)]
-          else -- coreFormulas.isEmpty && !includeLCtx
-            return #[(s!"{← `(tactic| duper {preprocessing := full})}", 1.0)]
-        | Solver.cvc5 => throwError "evalHammer :: cvc5 support not yet implemented"
+          let stx ←
+            if !coreFormulas.isEmpty && includeLCtx then
+              `(tactic| duper [*, $(coreFormulas.toArray),*] {preprocessing := full})
+            else if !coreFormulas.isEmpty && !includeLCtx then
+              `(tactic| duper [$(coreFormulas.toArray),*] {preprocessing := full})
+            else if coreFormulas.isEmpty && includeLCtx then
+              `(tactic| duper [*] {preprocessing := full})
+            else -- coreFormulas.isEmpty && !includeLCtx
+              `(tactic| duper {preprocessing := full})
+          let tac := withoutRecover $ evalTactic stx
+          let postGoalsIWouldGet := (← Elab.Tactic.run absurd tac |>.run').toArray
+          let postGoals := #[]
+          let postState ← saveState
+          let tacticBuilder := pure $ .unstructured ⟨stx⟩
+          let step := {
+            preGoal := input.goal
+            tacticBuilders := #[tacticBuilder]
+            preState, postState, postGoals
+          }
+          return (#[], some #[step], some ⟨1.0⟩)
 
 end HammerCore

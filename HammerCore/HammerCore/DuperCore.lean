@@ -10,7 +10,20 @@ namespace HammerCore
 def containsConst (e : Expr) (p : Name → Bool) : Bool :=
   Option.isSome <| e.find? fun | .const n _ => p n | _ => false
 
+/-- Checks `unsatCoreDerivLeafStrings` to see if it contains a string that matches `fact`. -/
 def unsatCoreIncludesFact (unsatCoreDerivLeafStrings : Array String) (fact : Term) : Bool := Id.run do
+  unsatCoreDerivLeafStrings.anyM
+    (fun factStr => do
+      -- **TODO** Modify `Duper.collectAssumptions` to output a leaf containing `s!"❰{factStx}❱"` so that we only need to check if `factStr` contains `s!"❰{fact}❱"`
+      if factStr == s!"❰{fact}❱" then pure true
+      else
+        let [_isFromGoal, _includeInSetOfSupport, factStrStx] := factStr.splitOn ", "
+          | pure false
+        pure $ factStrStx == s!"{fact}"
+    )
+
+/-- Like `unsatCoreIncludesFact` but takes `fact` as a String instead of a Term. -/
+def unsatCoreIncludesFactAsString (unsatCoreDerivLeafStrings : Array String) (fact : String) : Bool := Id.run do
   unsatCoreDerivLeafStrings.anyM
     (fun factStr => do
       -- **TODO** Modify `Duper.collectAssumptions` to output a leaf containing `s!"❰{factStx}❱"` so that we only need to check if `factStr` contains `s!"❰{fact}❱"`

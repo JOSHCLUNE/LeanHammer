@@ -1,8 +1,9 @@
 import HammerCore
 import PremiseSelection
 import Aesop
+import Qq
 
-open Lean Elab Tactic HammerCore Syntax PremiseSelection Duper Aesop
+open Lean Meta Elab Tactic HammerCore Syntax PremiseSelection Duper Aesop Qq
 
 namespace Hammer
 
@@ -33,15 +34,20 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       evalTactic (← `(tactic| aesop? $addIdentStxs*))
   else
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
-      if autoPremises.isEmpty then
-        evalTactic (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% (by hammerCore [$simpLemmas,*] [*]))))
-      else
-        evalTactic (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% (by hammerCore [$simpLemmas,*] [*, $(autoPremises),*]))))
-      -- **TODO** Trying to find a way to integrate `hammerCoreTacGen`
+      let formulas ← collectAssumptions autoPremises false #[]
+      let formulas : List (Expr × Expr × Array Name × Bool × String) := -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
+        formulas.filterMap (fun (fact, proof, params, isFromGoal, stxOpt) => stxOpt.map (fun stx => (fact, proof, params, isFromGoal, stx.raw.getId.toString)))
+      let ruleTacType := mkConst `Aesop.SingleRuleTac
+      let ruleTacVal ← mkAppM `HammerCore.hammerCoreSingleRuleTac #[q($formulas), q($includeLCtx), q($configOptions)]
+      let ruleTacDecl := mkDefinitionValEx `instantiatedHammerCoreRuleTac [] ruleTacType ruleTacVal ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedHammerCoreRuleTac]
+      addAndCompile $ Declaration.defnDecl ruleTacDecl
+      let ruleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedHammerCoreRuleTac)))
+      evalTactic (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% tactic $ruleTacStx)))
 
 @[tactic hammer]
 def evalHammer : Tactic
-| `(tactic| hammer%$stxRef [$userInputTerms,*] {$configOptions,*}) => withMainContext do
+| `(tactic| hammer%$stxRef [$userInputTerms,*] {$configOptions,*}) => withoutModifyingEnv do
+  withMainContext do
   withOptions (fun o => o.set `linter.deprecated false) do
   let goal ← getMainGoal
   let userInputTerms : Array Term := userInputTerms
