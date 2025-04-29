@@ -99,8 +99,7 @@ def hammerCoreSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool
             else -- coreFormulas.isEmpty && !includeLCtx
               `(tactic| duper {preprocessing := full})
           let tac := withoutRecover $ evalTactic stx
-          let postGoalsIWouldGet := (← Elab.Tactic.run absurd tac |>.run').toArray
-          let postGoals := #[]
+          let postGoals := (← Elab.Tactic.run absurd tac |>.run').toArray
           let postState ← saveState
           let tacticBuilder := pure $ .unstructured ⟨stx⟩
           let step := {
@@ -108,6 +107,7 @@ def hammerCoreSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool
             tacticBuilders := #[tacticBuilder]
             preState, postState, postGoals
           }
-          return (#[], some #[step], some ⟨1.0⟩)
+          let postGoals ← postGoals.mapM (mvarIdToSubgoal input.goal ·)
+          return (postGoals, some #[step], some ⟨1.0⟩)
 
 end HammerCore
