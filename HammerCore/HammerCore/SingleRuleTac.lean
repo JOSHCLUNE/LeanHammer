@@ -80,7 +80,7 @@ def hammerCoreSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool
             )
         match configOptions.solver with
         | Solver.cvc5 => throwError "evalHammer :: cvc5 support not yet implemented"
-        | Solver.zipperposition =>
+        | Solver.zipperposition_exe | Solver.zipperposition =>
           let unsatCoreDerivLeafStrings := solverHints.1
           trace[hammer.debug] "unsatCoreDerivLeafStrings: {unsatCoreDerivLeafStrings}"
           -- Collect all formulas that appear in the unsat core and have a `stxOpt`

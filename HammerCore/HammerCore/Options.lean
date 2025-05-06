@@ -11,6 +11,7 @@ declare_syntax_cat Hammer.configOption (behavior := symbol)
 
 namespace HammerCore
 
+syntax "zipperposition_exe" : Hammer.solverOption
 syntax "zipperposition" : Hammer.solverOption
 syntax "cvc5" : Hammer.solverOption
 
@@ -20,8 +21,9 @@ syntax "no_preprocessing" : Hammer.preprocessing -- Corresponds to skipping all 
 syntax "aesop" : Hammer.preprocessing -- Corresponds to integrating with `aesop` (thus using `aesop` for preprocessing)
 
 inductive Solver where
-| zipperposition
-| cvc5
+| zipperposition_exe -- The default solver that uses the executable retrieved by `lean-auto`'s post-update hook
+| zipperposition -- Calls a local installation of Zipperposition
+| cvc5 -- Calls a local installation of cvc5
 deriving ToExpr
 
 inductive Preprocessing where
@@ -36,6 +38,7 @@ open Solver Preprocessing
 def elabSolverOption [Monad m] [MonadError m] (stx : TSyntax `Hammer.solverOption) : m Solver :=
   withRef stx do
     match stx with
+    | `(solverOption| zipperposition_exe) => return zipperposition_exe
     | `(solverOption| zipperposition) => return zipperposition
     | `(solverOption| cvc5) => return cvc5
     | _ => Elab.throwUnsupportedSyntax
@@ -133,7 +136,7 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   -- Set default values for options that were not specified
   let solver :=
     match solverOpt with
-    | none => Solver.zipperposition
+    | none => Solver.zipperposition_exe
     | some solver => solver
   if goalHypPrefix.isEmpty then goalHypPrefix := "h"
   if negGoalLemmaName.isEmpty then negGoalLemmaName := "negGoal"
@@ -167,6 +170,16 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
 
 def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (configOptions : ConfigurationOptions) (x : m α) : m α :=
   match configOptions.solver with
+  | zipperposition_exe =>
+    withOptions
+      (fun o =>
+        let o := o.set `auto.tptp true
+        let o := o.set `auto.smt false
+        let o := o.set `auto.tptp.premiseSelection true
+        let o := o.set `auto.tptp.solver.name "zipperposition_exe"
+        let o := o.set `auto.mono.ignoreNonQuasiHigherOrder true
+        o.set `auto.native true
+      ) x
   | zipperposition =>
     withOptions
       (fun o =>

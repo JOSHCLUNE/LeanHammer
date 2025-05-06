@@ -173,7 +173,7 @@ def runHammerCore (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser
               throwTranslationError e
           )
       match configOptions.solver with
-      | Solver.zipperposition =>
+      | Solver.zipperposition_exe | Solver.zipperposition =>
         let mut tacticsArr := preprocessingSuggestion -- The array of tactics that will be suggested to the user
         let unsatCoreDerivLeafStrings := solverHints.1
         trace[hammer.debug] "unsatCoreDerivLeafStrings: {unsatCoreDerivLeafStrings}"
