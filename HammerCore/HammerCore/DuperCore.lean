@@ -60,14 +60,6 @@ def getDuperCoreLemmas (unsatCoreDerivLeafStrings : Array String) (userFacts : S
     catch e =>
       throwError m!"{decl_name%} :: Unable to use hints from external solver to reconstruct proof. " ++
                   m!"Duper threw the following error:\n\n{e.toMessageData}"
-  -- Determine which of the user provided facts appear in `prf`
-  let mut userInputFactsInProof := #[]
-  for factStx in userFacts do
-    -- **TODO** Write a variant of `runDuperPortfolioMode` that returns the list of facts that were used to reconstruct the proof (current approach is brittle)
-    -- **TODO** Add support for userFacts that aren't just names of premises (e.g. `(by omega : 1 + 1 = 2)`)
-    let factName := factStx.raw.getId
-    if containsConst prf (fun n => n == factName) then
-      userInputFactsInProof := userInputFactsInProof.push factStx
-  pure (userInputFactsInProof, prf)
+  pure (coreUserFacts, prf)
 
 end HammerCore
