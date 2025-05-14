@@ -7,6 +7,8 @@ require «Qq» from git "https://github.com/leanprover-community/quote4.git" @ "
 
 require «HammerCore» from "./HammerCore"
 
+require «smt» from git "https://github.com/JOSHCLUNE/lean-smt.git" @ "v4.18.0"
+
 package Hammer 
 
 @[default_target]
