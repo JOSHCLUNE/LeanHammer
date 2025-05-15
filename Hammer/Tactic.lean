@@ -18,8 +18,8 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
   (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit := withMainContext do
   let aesopAutoPriority := configOptions.aesopAutoPriority
   let aesopPremisePriority := configOptions.aesopPremisePriority
-  let autoPremises := userInputTerms ++ premises.take configOptions.k1
-  let aesopPremises := userInputTerms ++ premises.take configOptions.k2
+  let autoPremises := userInputTerms ++ premises.take configOptions.autoPremises
+  let aesopPremises := userInputTerms ++ premises.take configOptions.aesopPremises
   let mut addIdentStxs : TSyntaxArray `Aesop.tactic_clause := #[]
   for p in aesopPremises do
     -- **TODO** Add support for terms that aren't just names of premises
@@ -52,7 +52,7 @@ def evalHammer : Tactic
   let goal ← getMainGoal
   let userInputTerms : Array Term := userInputTerms
   let configOptions ← parseConfigOptions configOptions
-  let maxSuggestions := max configOptions.k1 configOptions.k2
+  let maxSuggestions := max configOptions.autoPremises configOptions.aesopPremises
   let premiseSelectionConfig : PremiseSelection.Config := {
     maxSuggestions := maxSuggestions,
     caller := `hammer

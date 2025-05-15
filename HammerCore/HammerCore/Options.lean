@@ -8,8 +8,113 @@ declare_syntax_cat Hammer.solverOption (behavior := symbol)
 declare_syntax_cat Hammer.preprocessing (behavior := symbol)
 -- An option to specify other configuration options for `hammer`
 declare_syntax_cat Hammer.configOption (behavior := symbol)
+-- An option to indicate a boolean value (used for toggling `disableAesop` and `disableAuto`)
+declare_syntax_cat Hammer.bool_lit (behavior := symbol)
+syntax "true" : Hammer.bool_lit
+syntax "false" : Hammer.bool_lit
+
+register_option hammer.solverDefault : String := {
+  defValue := "zipperposition_exe"
+  descr := "The default value of the solver option"
+}
+
+register_option hammer.goalHypPrefixDefault : String := {
+  defValue := "h"
+  descr := "The default value of the goalHypPrefix option"
+}
+
+register_option hammer.negGoalLemmaNameDefault : String := {
+  defValue := "negGoal"
+  descr := "The default value of the negGoalLemmaName option"
+}
+
+register_option hammer.preprocessingDefault : String := {
+  defValue := "aesop"
+  descr := "The default value of the preprocessing option"
+}
+
+register_option hammer.disableAesopDefault : Bool := {
+  defValue := false
+  descr := "The default value of the disableAesop option"
+}
+
+register_option hammer.disableAutoDefault : Bool := {
+  defValue := false
+  descr := "The default value of the disableAuto option"
+}
+
+register_option hammer.autoPremisesDefault : Nat := {
+  defValue := 16
+  descr := "The default number of premises sent to auto"
+}
+
+register_option hammer.aesopPremisesDefault : Nat := {
+  defValue := 32
+  descr := "The default number of premises sent to aesop to be used as unsafe rules"
+}
+
+register_option hammer.aesopPremisePriorityDefault : Nat := {
+  defValue := 20
+  descr := "The default priority of premises sent to aesop"
+}
+
+register_option hammer.aesopAutoPriorityDefault : Nat := {
+  defValue := 10
+  descr := "The default priority of calls to auto within aesop"
+}
 
 namespace HammerCore
+
+def getHammerSolverDefault (opts : Options) : String := hammer.solverDefault.get opts
+def getGoalHypPrefixDefault (opts : Options) : String := hammer.goalHypPrefixDefault.get opts
+def getNegGoalLemmaNameDefault (opts : Options) : String := hammer.negGoalLemmaNameDefault.get opts
+def getPreprocessingDefault (opts : Options) : String := hammer.preprocessingDefault.get opts
+def getDisableAesopDefault (opts : Options) : Bool := hammer.disableAesopDefault.get opts
+def getDisableAutoDefault (opts : Options) : Bool := hammer.disableAutoDefault.get opts
+def getAutoPremisesDefault (opts : Options) : Nat := hammer.autoPremisesDefault.get opts
+def getAesopPremisesDefault (opts : Options) : Nat := hammer.aesopPremisesDefault.get opts
+def getAesopPremisePriorityDefault (opts : Options) : Nat := hammer.aesopPremisePriorityDefault.get opts
+def getAesopAutoPriorityDefault (opts : Options) : Nat := hammer.aesopAutoPriorityDefault.get opts
+
+def getHammerSolverDefaultM : CoreM String := do
+  let opts ← getOptions
+  return getHammerSolverDefault opts
+
+def getGoalHypPrefixDefaultM : CoreM String := do
+  let opts ← getOptions
+  return getGoalHypPrefixDefault opts
+
+def getNegGoalLemmaNameDefaultM : CoreM String := do
+  let opts ← getOptions
+  return getNegGoalLemmaNameDefault opts
+
+def getPreprocessingDefaultM : CoreM String := do
+  let opts ← getOptions
+  return getPreprocessingDefault opts
+
+def getDisableAesopDefaultM : CoreM Bool := do
+  let opts ← getOptions
+  return getDisableAesopDefault opts
+
+def getDisableAutoDefaultM : CoreM Bool := do
+  let opts ← getOptions
+  return getDisableAutoDefault opts
+
+def getAutoPremisesDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getAutoPremisesDefault opts
+
+def getAesopPremisesDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getAesopPremisesDefault opts
+
+def getAesopPremisePriorityDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getAesopPremisePriorityDefault opts
+
+def getAesopAutoPriorityDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getAesopAutoPriorityDefault opts
 
 syntax "zipperposition_exe" : Hammer.solverOption
 syntax "zipperposition" : Hammer.solverOption
@@ -43,6 +148,14 @@ def elabSolverOption [Monad m] [MonadError m] (stx : TSyntax `Hammer.solverOptio
     | `(solverOption| cvc5) => return cvc5
     | _ => Elab.throwUnsupportedSyntax
 
+def elabSolverOptionDefault : CoreM Solver := do
+  let solverName ← getHammerSolverDefaultM
+  match solverName with
+  | "zipperposition_exe" => return zipperposition_exe
+  | "zipperposition" => return zipperposition
+  | "cvc5" => return cvc5
+  | _ => throwError "Unsupported default solver option: {solverName}"
+
 def elabPreprocessing [Monad m] [MonadError m] (stx : TSyntax `Hammer.preprocessing) : m Preprocessing :=
   withRef stx do
     match stx with
@@ -52,14 +165,30 @@ def elabPreprocessing [Monad m] [MonadError m] (stx : TSyntax `Hammer.preprocess
     | `(preprocessing| aesop) => return aesop
     | _ => Elab.throwUnsupportedSyntax
 
+def elabPreprocessingDefault : CoreM Preprocessing := do
+  let preprocessingName ← getPreprocessingDefaultM
+  match preprocessingName with
+  | "simp_target" => return simp_target
+  | "simp_all" => return simp_all
+  | "no_preprocessing" => return no_preprocessing
+  | "aesop" => return aesop
+  | _ => throwError "Unsupported default preprocessing option: {preprocessingName}"
+
+def elabBoolLit [Monad m] [MonadError m] (stx : TSyntax `Hammer.bool_lit) : m Bool :=
+  withRef stx do
+    match stx with
+    | `(bool_lit| true) => return true
+    | `(bool_lit| false) => return false
+    | _ => Elab.throwUnsupportedSyntax
+
 syntax (&"solver" " := " Hammer.solverOption) : Hammer.configOption
 syntax (&"goalHypPrefix" " := " strLit) : Hammer.configOption
 syntax (&"negGoalLemmaName" " := " strLit) : Hammer.configOption
 syntax (&"preprocessing" " := " Hammer.preprocessing) : Hammer.configOption
-syntax (&"disableAuto") : Hammer.configOption
-syntax (&"disableAesop") : Hammer.configOption
-syntax (&"k1" " := " numLit) : Hammer.configOption -- The number of premises sent to `auto` (default: 16)
-syntax (&"k2" " := " numLit) : Hammer.configOption -- The number of premises sent to `aesop` (default: 32)
+syntax (&"disableAuto" " := " Hammer.bool_lit) : Hammer.configOption
+syntax (&"disableAesop" " := " Hammer.bool_lit) : Hammer.configOption
+syntax (&"autoPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `auto` (default: 16)
+syntax (&"aesopPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `aesop` (default: 32)
 syntax (&"aesopPremisePriority" " := " numLit) : Hammer.configOption -- The priority of premises sent to `aesop` (default: 20)
 syntax (&"aesopAutoPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `auto` within `aesop` (default: 10)
 
@@ -72,8 +201,8 @@ structure ConfigurationOptions where
   disableAesop : Bool
   aesopPremisePriority : Nat
   aesopAutoPriority : Nat
-  k1 : Nat -- The number of premises sent to `auto` (default: 16)
-  k2 : Nat -- The number of premises sent to `aesop` (default: 32)
+  autoPremises : Nat -- The number of premises sent to `auto` (default: 16)
+  aesopPremises : Nat -- The number of premises sent to `aesop` (default: 32)
 deriving ToExpr
 
 syntax hammerStar := "*"
@@ -98,10 +227,10 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   let mut goalHypPrefix := ""
   let mut negGoalLemmaName := ""
   let mut preprocessingOpt := none
-  let mut disableAuto := false
-  let mut disableAesop := false
-  let mut k1Opt := none
-  let mut k2Opt := none
+  let mut disableAutoOpt := none
+  let mut disableAesopOpt := none
+  let mut autoPremisesOpt := none
+  let mut aesopPremisesOpt := none
   let mut aesopPremisePriorityOpt := none
   let mut aesopAutoPriorityOpt := none
   for configOptionStx in configOptionsStx do
@@ -118,14 +247,18 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| preprocessing := $preprocessing:Hammer.preprocessing) =>
       if preprocessingOpt.isNone then preprocessingOpt ← elabPreprocessing preprocessing
       else throwError "Erroneous invocation of hammer: The preprocessing option has been specified multiple times"
-    | `(Hammer.configOption| disableAuto) => disableAuto := true
-    | `(Hammer.configOption| disableAesop) => disableAesop := true
-    | `(Hammer.configOption| k1 := $userK1:num) =>
-      if k1Opt.isNone then k1Opt := some (TSyntax.getNat userK1)
-      else throwError "Erroneous invocation of hammer: The k1 option has been specified multiple times"
-    | `(Hammer.configOption| k2 := $userK2:num) =>
-      if k2Opt.isNone then k2Opt := some (TSyntax.getNat userK2)
-      else throwError "Erroneous invocation of hammer: The k2 option has been specified multiple times"
+    | `(Hammer.configOption| disableAuto := $disableAutoBoolLit:Hammer.bool_lit) =>
+      if disableAutoOpt.isNone then disableAutoOpt := some $ ← elabBoolLit disableAutoBoolLit
+      else throwError "Erroneous invocation of hammer: The disableAuto option has been specified multiple times"
+    | `(Hammer.configOption| disableAesop := $disableAesopBoolLit:Hammer.bool_lit) =>
+      if disableAesopOpt.isNone then disableAesopOpt := some $ ← elabBoolLit disableAesopBoolLit
+      else throwError "Erroneous invocation of hammer: The disableAesop option has been specified multiple times"
+    | `(Hammer.configOption| autoPremises := $userAutoPremises:num) =>
+      if autoPremisesOpt.isNone then autoPremisesOpt := some (TSyntax.getNat userAutoPremises)
+      else throwError "Erroneous invocation of hammer: The autoPremises option has been specified multiple times"
+    | `(Hammer.configOption| aesopPremises := $userAesopPremises:num) =>
+      if aesopPremisesOpt.isNone then aesopPremisesOpt := some (TSyntax.getNat userAesopPremises)
+      else throwError "Erroneous invocation of hammer: The aesopPremises option has been specified multiple times"
     | `(Hammer.configOption| aesopPremisePriority := $userAesopPremisePriority:num) =>
       if aesopPremisePriorityOpt.isNone then aesopPremisePriorityOpt := some (TSyntax.getNat userAesopPremisePriority)
       else throwError "Erroneous invocation of hammer: The aesopPremisePriority option has been specified multiple times"
@@ -134,37 +267,46 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
       else throwError "Erroneous invocation of hammer: The aesopAutoPriority option has been specified multiple times"
     | _ => throwUnsupportedSyntax
   -- Set default values for options that were not specified
-  let solver :=
+  let solver ← -- **TODO** Will likely need to refactor/rethink `solver` option when incorporating lean-smt
     match solverOpt with
-    | none => Solver.zipperposition_exe
-    | some solver => solver
-  if goalHypPrefix.isEmpty then goalHypPrefix := "h"
-  if negGoalLemmaName.isEmpty then negGoalLemmaName := "negGoal"
-  let preprocessing :=
+    | none => elabSolverOptionDefault
+    | some solver => pure solver
+  if goalHypPrefix.isEmpty then goalHypPrefix ← getGoalHypPrefixDefaultM
+  if negGoalLemmaName.isEmpty then negGoalLemmaName ← getNegGoalLemmaNameDefaultM
+  let disableAuto ←
+    match disableAutoOpt with
+    | none => getDisableAutoDefaultM
+    | some disableAuto => pure disableAuto
+  let disableAesop ←
+    match disableAesopOpt with
+    | none => getDisableAesopDefaultM
+    | some disableAesop => pure disableAesop
+  let preprocessing ←
     match preprocessingOpt with
     | none =>
-      if disableAesop then Preprocessing.simp_all
-      else Preprocessing.aesop
-    | some preprocessing => preprocessing
-  let k1 :=
-    match k1Opt with
-    | none => 16
-    | some k1 => k1
-  let k2 :=
-    match k2Opt with
-    | none => 32
-    | some k2 => k2
-  let aesopPremisePriority :=
+      if disableAesop && (← getPreprocessingDefaultM) == "aesop" then pure Preprocessing.simp_all
+      else elabPreprocessingDefault
+    | some preprocessing => pure preprocessing
+  let autoPremises ←
+    match autoPremisesOpt with
+    | none => getAutoPremisesDefaultM
+    | some autoPremises => pure autoPremises
+  let aesopPremises ←
+    match aesopPremisesOpt with
+    | none => getAesopPremisesDefaultM
+    | some aesopPremises => pure aesopPremises
+  let aesopPremisePriority ←
     match aesopPremisePriorityOpt with
-    | none => 20
-    | some aesopPremisePriority => aesopPremisePriority
-  let aesopAutoPriority :=
+    | none => getAesopPremisePriorityDefaultM
+    | some aesopPremisePriority => pure aesopPremisePriority
+  let aesopAutoPriority ←
     match aesopAutoPriorityOpt with
-    | none => 10
-    | some aesopAutoPriority => aesopAutoPriority
+    | none => getAesopAutoPriorityDefaultM
+    | some aesopAutoPriority => pure aesopAutoPriority
   let configOptions :=
     {solver := solver, goalHypPrefix := goalHypPrefix, negGoalLemmaName := negGoalLemmaName, preprocessing := preprocessing, disableAuto := disableAuto,
-     disableAesop := disableAesop, k1 := k1, k2 := k2, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority}
+     disableAesop := disableAesop, autoPremises := autoPremises, aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority,
+     aesopAutoPriority := aesopAutoPriority}
   validateConfigOptions configOptions
   return configOptions
 
