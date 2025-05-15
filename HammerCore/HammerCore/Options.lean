@@ -58,8 +58,8 @@ syntax (&"negGoalLemmaName" " := " strLit) : Hammer.configOption
 syntax (&"preprocessing" " := " Hammer.preprocessing) : Hammer.configOption
 syntax (&"disableAuto") : Hammer.configOption
 syntax (&"disableAesop") : Hammer.configOption
-syntax (&"k1" " := " numLit) : Hammer.configOption -- The number of premises sent to `auto` (default: 16)
-syntax (&"k2" " := " numLit) : Hammer.configOption -- The number of premises sent to `aesop` (default: 32)
+syntax (&"autoPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `auto` (default: 16)
+syntax (&"aesopPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `aesop` (default: 32)
 syntax (&"aesopPremisePriority" " := " numLit) : Hammer.configOption -- The priority of premises sent to `aesop` (default: 20)
 syntax (&"aesopAutoPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `auto` within `aesop` (default: 10)
 
@@ -72,8 +72,8 @@ structure ConfigurationOptions where
   disableAesop : Bool
   aesopPremisePriority : Nat
   aesopAutoPriority : Nat
-  k1 : Nat -- The number of premises sent to `auto` (default: 16)
-  k2 : Nat -- The number of premises sent to `aesop` (default: 32)
+  autoPremises : Nat -- The number of premises sent to `auto` (default: 16)
+  aesopPremises : Nat -- The number of premises sent to `aesop` (default: 32)
 deriving ToExpr
 
 syntax hammerStar := "*"
@@ -100,8 +100,8 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   let mut preprocessingOpt := none
   let mut disableAuto := false
   let mut disableAesop := false
-  let mut k1Opt := none
-  let mut k2Opt := none
+  let mut autoPremisesOpt := none
+  let mut aesopPremisesOpt := none
   let mut aesopPremisePriorityOpt := none
   let mut aesopAutoPriorityOpt := none
   for configOptionStx in configOptionsStx do
@@ -120,12 +120,12 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
       else throwError "Erroneous invocation of hammer: The preprocessing option has been specified multiple times"
     | `(Hammer.configOption| disableAuto) => disableAuto := true
     | `(Hammer.configOption| disableAesop) => disableAesop := true
-    | `(Hammer.configOption| k1 := $userK1:num) =>
-      if k1Opt.isNone then k1Opt := some (TSyntax.getNat userK1)
-      else throwError "Erroneous invocation of hammer: The k1 option has been specified multiple times"
-    | `(Hammer.configOption| k2 := $userK2:num) =>
-      if k2Opt.isNone then k2Opt := some (TSyntax.getNat userK2)
-      else throwError "Erroneous invocation of hammer: The k2 option has been specified multiple times"
+    | `(Hammer.configOption| autoPremises := $userAutoPremises:num) =>
+      if autoPremisesOpt.isNone then autoPremisesOpt := some (TSyntax.getNat userAutoPremises)
+      else throwError "Erroneous invocation of hammer: The autoPremises option has been specified multiple times"
+    | `(Hammer.configOption| aesopPremises := $userAesopPremises:num) =>
+      if aesopPremisesOpt.isNone then aesopPremisesOpt := some (TSyntax.getNat userAesopPremises)
+      else throwError "Erroneous invocation of hammer: The aesopPremises option has been specified multiple times"
     | `(Hammer.configOption| aesopPremisePriority := $userAesopPremisePriority:num) =>
       if aesopPremisePriorityOpt.isNone then aesopPremisePriorityOpt := some (TSyntax.getNat userAesopPremisePriority)
       else throwError "Erroneous invocation of hammer: The aesopPremisePriority option has been specified multiple times"
@@ -146,14 +146,14 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
       if disableAesop then Preprocessing.simp_all
       else Preprocessing.aesop
     | some preprocessing => preprocessing
-  let k1 :=
-    match k1Opt with
+  let autoPremises :=
+    match autoPremisesOpt with
     | none => 16
-    | some k1 => k1
-  let k2 :=
-    match k2Opt with
+    | some autoPremises => autoPremises
+  let aesopPremises :=
+    match aesopPremisesOpt with
     | none => 32
-    | some k2 => k2
+    | some aesopPremises => aesopPremises
   let aesopPremisePriority :=
     match aesopPremisePriorityOpt with
     | none => 20
@@ -164,7 +164,8 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | some aesopAutoPriority => aesopAutoPriority
   let configOptions :=
     {solver := solver, goalHypPrefix := goalHypPrefix, negGoalLemmaName := negGoalLemmaName, preprocessing := preprocessing, disableAuto := disableAuto,
-     disableAesop := disableAesop, k1 := k1, k2 := k2, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority}
+     disableAesop := disableAesop, autoPremises := autoPremises, aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority,
+     aesopAutoPriority := aesopAutoPriority}
   validateConfigOptions configOptions
   return configOptions
 
