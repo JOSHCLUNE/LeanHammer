@@ -34,7 +34,7 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       evalTactic (← `(tactic| aesop? $addIdentStxs*))
   else
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
-      let formulas ← collectAssumptions autoPremises false #[]
+      let formulas ← withDuperOptions $ collectAssumptions autoPremises false #[]
       let formulas : List (Expr × Expr × Array Name × Bool × String) := -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
         formulas.filterMap (fun (fact, proof, params, isFromGoal, stxOpt) => stxOpt.map (fun stx => (fact, proof, params, isFromGoal, stx.raw.getId.toString)))
       let ruleTacType := mkConst `Aesop.SingleRuleTac
@@ -60,7 +60,8 @@ def evalHammer : Tactic
   -- Get the registered premise selector for premise selection.
   -- If none registered, then use the cloud premise selector by default.
   let selector := premiseSelectorExt.getState (← getEnv)
-  let selector := selector.getD Cloud.premiseSelector
+  let defaultSelector := interleave #[Cloud.premiseSelector, mepoSelector (useRarity := true) (p := 0.6) (c := 0.9)] <|> mepoSelector (useRarity := true) (p := 0.6) (c := 0.9)
+  let selector := selector.getD defaultSelector
   let premises ←
     if maxSuggestions == 0 then pure #[] -- If `maxSuggestions` is 0, then we don't need to waste time calling the premise selector
     else selector goal premiseSelectionConfig
