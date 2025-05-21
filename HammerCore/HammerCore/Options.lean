@@ -322,11 +322,13 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   return configOptions
 
 def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (configOptions : ConfigurationOptions) (x : m α) : m α :=
+  let timeout := if configOptions.disableAesop then 10 else 1 -- Include a shorter timeout when `aesop` is enabled because `auto` will be called multiple times
   match configOptions.solver with
   | zipperposition_exe =>
     withOptions
       (fun o =>
         let o := o.set `auto.tptp true
+        let o := o.set `auto.tptp.timeout timeout
         let o := o.set `auto.smt false
         let o := o.set `auto.tptp.premiseSelection true
         let o := o.set `auto.tptp.solver.name "zipperposition_exe"
@@ -337,6 +339,7 @@ def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (configOptio
     withOptions
       (fun o =>
         let o := o.set `auto.tptp true
+        let o := o.set `auto.tptp.timeout timeout
         let o := o.set `auto.smt false
         let o := o.set `auto.tptp.premiseSelection true
         let o := o.set `auto.tptp.solver.name "zipperposition"
