@@ -1,4 +1,5 @@
 import Lean
+import Auto
 
 open Lean Parser Elab Tactic
 
@@ -129,7 +130,7 @@ inductive Solver where
 | zipperposition_exe -- The default solver that uses the executable retrieved by `lean-auto`'s post-update hook
 | zipperposition -- Calls a local installation of Zipperposition
 | cvc5 -- Calls a local installation of cvc5
-deriving ToExpr
+deriving ToExpr, BEq
 
 inductive Preprocessing where
 | simp_target
@@ -214,13 +215,23 @@ syntax (name := hammerCore) "hammerCore"
 macro_rules | `(tactic| hammerCore [$simpLemmas,*] [$facts,*]) => `(tactic| hammerCore [$simpLemmas,*] [$facts,*] {})
 
 /-- Checks to ensure that the set of given `configOptions` is usable. -/
-def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM Unit := do
+def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM ConfigurationOptions := do
   if configOptions.disableAesop && configOptions.disableAuto then
     throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
   if configOptions.disableAesop && configOptions.preprocessing == Preprocessing.aesop then
     throwError "Erroneous invocation of hammer: Preprocessing cannot be set to aesop when aesop is disabled"
   if !configOptions.disableAesop && configOptions.preprocessing != Preprocessing.aesop then
     throwError "Erroneous invocation of hammer: Preprocessing must be set to aesop when aesop is enabled"
+  if !configOptions.disableAuto && configOptions.solver == Solver.zipperposition_exe then
+    try
+      let _ ← Auto.Solver.TPTP.getZipperpositionExePath -- This throws an error if the executable can't be found
+    catch _ =>
+      if configOptions.disableAesop then
+        throwError "The bundled zipperposition executable could not be found. To retrieve it, run `lake update`."
+      else
+        logWarning "The bundled zipperposition executable could not be found. To retrieve it, run `lake update`. Continuing with auto disabled..."
+        return {configOptions with disableAuto := true}
+  return configOptions
 
 def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : TacticM ConfigurationOptions := do
   let mut solverOpt := none
@@ -307,7 +318,7 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     {solver := solver, goalHypPrefix := goalHypPrefix, negGoalLemmaName := negGoalLemmaName, preprocessing := preprocessing, disableAuto := disableAuto,
      disableAesop := disableAesop, autoPremises := autoPremises, aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority,
      aesopAutoPriority := aesopAutoPriority}
-  validateConfigOptions configOptions
+  let configOptions ← validateConfigOptions configOptions
   return configOptions
 
 def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (configOptions : ConfigurationOptions) (x : m α) : m α :=
