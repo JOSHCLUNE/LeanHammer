@@ -19,16 +19,6 @@ register_option hammer.solverDefault : String := {
   descr := "The default value of the solver option"
 }
 
-register_option hammer.goalHypPrefixDefault : String := {
-  defValue := "h"
-  descr := "The default value of the goalHypPrefix option"
-}
-
-register_option hammer.negGoalLemmaNameDefault : String := {
-  defValue := "negGoal"
-  descr := "The default value of the negGoalLemmaName option"
-}
-
 register_option hammer.preprocessingDefault : String := {
   defValue := "aesop"
   descr := "The default value of the preprocessing option"
@@ -67,8 +57,6 @@ register_option hammer.aesopAutoPriorityDefault : Nat := {
 namespace HammerCore
 
 def getHammerSolverDefault (opts : Options) : String := hammer.solverDefault.get opts
-def getGoalHypPrefixDefault (opts : Options) : String := hammer.goalHypPrefixDefault.get opts
-def getNegGoalLemmaNameDefault (opts : Options) : String := hammer.negGoalLemmaNameDefault.get opts
 def getPreprocessingDefault (opts : Options) : String := hammer.preprocessingDefault.get opts
 def getDisableAesopDefault (opts : Options) : Bool := hammer.disableAesopDefault.get opts
 def getDisableAutoDefault (opts : Options) : Bool := hammer.disableAutoDefault.get opts
@@ -80,14 +68,6 @@ def getAesopAutoPriorityDefault (opts : Options) : Nat := hammer.aesopAutoPriori
 def getHammerSolverDefaultM : CoreM String := do
   let opts ← getOptions
   return getHammerSolverDefault opts
-
-def getGoalHypPrefixDefaultM : CoreM String := do
-  let opts ← getOptions
-  return getGoalHypPrefixDefault opts
-
-def getNegGoalLemmaNameDefaultM : CoreM String := do
-  let opts ← getOptions
-  return getNegGoalLemmaNameDefault opts
 
 def getPreprocessingDefaultM : CoreM String := do
   let opts ← getOptions
@@ -183,8 +163,6 @@ def elabBoolLit [Monad m] [MonadError m] (stx : TSyntax `Hammer.bool_lit) : m Bo
     | _ => Elab.throwUnsupportedSyntax
 
 syntax (&"solver" " := " Hammer.solverOption) : Hammer.configOption
-syntax (&"goalHypPrefix" " := " strLit) : Hammer.configOption
-syntax (&"negGoalLemmaName" " := " strLit) : Hammer.configOption
 syntax (&"preprocessing" " := " Hammer.preprocessing) : Hammer.configOption
 syntax (&"disableAuto" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"disableAesop" " := " Hammer.bool_lit) : Hammer.configOption
@@ -195,8 +173,6 @@ syntax (&"aesopAutoPriority" " := " numLit) : Hammer.configOption -- The priorit
 
 structure ConfigurationOptions where
   solver : Solver
-  goalHypPrefix : String
-  negGoalLemmaName : String
   preprocessing : Preprocessing
   disableAuto : Bool
   disableAesop : Bool
@@ -235,8 +211,6 @@ def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM Confi
 
 def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : TacticM ConfigurationOptions := do
   let mut solverOpt := none
-  let mut goalHypPrefix := ""
-  let mut negGoalLemmaName := ""
   let mut preprocessingOpt := none
   let mut disableAutoOpt := none
   let mut disableAesopOpt := none
@@ -249,12 +223,6 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| solver := $solverName:Hammer.solverOption) =>
       if solverOpt.isNone then solverOpt ← elabSolverOption solverName
       else throwError "Erroneous invocation of hammer: The solver option has been specified multiple times"
-    | `(Hammer.configOption| goalHypPrefix := $userGoalHypPrefix:str) =>
-      if goalHypPrefix.isEmpty then goalHypPrefix := userGoalHypPrefix.getString
-      else throwError "Erroneous invocation of hammer: The goalHypPrefix option has been specified multiple times"
-    | `(Hammer.configOption| negGoalLemmaName := $userNegGoalLemmaName:str) =>
-      if negGoalLemmaName.isEmpty then negGoalLemmaName := userNegGoalLemmaName.getString
-      else throwError "Erroneous invocation of hammer: The negGoalLemmaName option has been specified multiple times"
     | `(Hammer.configOption| preprocessing := $preprocessing:Hammer.preprocessing) =>
       if preprocessingOpt.isNone then preprocessingOpt ← elabPreprocessing preprocessing
       else throwError "Erroneous invocation of hammer: The preprocessing option has been specified multiple times"
@@ -282,8 +250,6 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match solverOpt with
     | none => elabSolverOptionDefault
     | some solver => pure solver
-  if goalHypPrefix.isEmpty then goalHypPrefix ← getGoalHypPrefixDefaultM
-  if negGoalLemmaName.isEmpty then negGoalLemmaName ← getNegGoalLemmaNameDefaultM
   let disableAuto ←
     match disableAutoOpt with
     | none => getDisableAutoDefaultM
@@ -315,9 +281,8 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | none => getAesopAutoPriorityDefaultM
     | some aesopAutoPriority => pure aesopAutoPriority
   let configOptions :=
-    {solver := solver, goalHypPrefix := goalHypPrefix, negGoalLemmaName := negGoalLemmaName, preprocessing := preprocessing, disableAuto := disableAuto,
-     disableAesop := disableAesop, autoPremises := autoPremises, aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority,
-     aesopAutoPriority := aesopAutoPriority}
+    {solver := solver, preprocessing := preprocessing, disableAuto := disableAuto, disableAesop := disableAesop, autoPremises := autoPremises,
+     aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority}
   let configOptions ← validateConfigOptions configOptions
   return configOptions
 

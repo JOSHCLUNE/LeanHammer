@@ -52,7 +52,10 @@ def evalHammer : Tactic
   let goal ← getMainGoal
   let userInputTerms : Array Term := userInputTerms
   let configOptions ← parseConfigOptions configOptions
-  let maxSuggestions := max configOptions.autoPremises configOptions.aesopPremises
+  let maxSuggestions :=
+    if configOptions.disableAesop then configOptions.autoPremises
+    else if configOptions.disableAuto then configOptions.aesopPremises
+    else max configOptions.autoPremises configOptions.aesopPremises
   let premiseSelectionConfig : PremiseSelection.Config := {
     maxSuggestions := maxSuggestions,
     caller := `hammer

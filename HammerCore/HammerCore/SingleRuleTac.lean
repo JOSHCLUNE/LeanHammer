@@ -28,18 +28,18 @@ def hammerCoreSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool
     /- Assuming `goal` has the form `∀ x1 : t1, ∀ x2 : t2, … ∀ xn : tn, b`, `goalPropHyps` is
        an array of size `n` where the mth element in `goalPropHyps` indicates whether the mth forall
        binder has a `Prop` type. This is used to help create `introNCoreNames` which should use existing
-       binder names for nonProp arguments and newly created names (based on `goalHypPrefix`) for Prop arguments -/
+       binder names for nonProp arguments and newly created names for Prop arguments -/
     let goalPropHyps ← forallTelescope goalType fun xs _ => do xs.mapM (fun x => do pure (← inferType (← inferType x)).isProp)
     for b in goalPropHyps do
       if b then
-        introNCoreNames := introNCoreNames.push (.str .anonymous (configOptions.goalHypPrefix ++ numGoalHyps.repr))
+        introNCoreNames := introNCoreNames.push (.str .anonymous ("h" ++ numGoalHyps.repr))
         numGoalHyps := numGoalHyps + 1
       else -- If fvarId corresponds to a non-sort type, then introduce it using the userName
         introNCoreNames := introNCoreNames.push `_ -- `introNCore` will overwrite this with the existing binder name
     let (_, newGoal) ← introNCore originalMainGoal numBinders introNCoreNames.toList true true
     let [nngoal] ← newGoal.apply (.const ``Classical.byContradiction [])
       | throwError "evalHammer :: Unexpected result after applying Classical.byContradiction"
-    let (_, absurd) ← MVarId.intro nngoal (.str .anonymous configOptions.negGoalLemmaName)
+    let (_, absurd) ← MVarId.intro nngoal (.str .anonymous "negGoal")
     absurd.withContext do
       let lctxAfterIntros ← getLCtx
       let goalDecls := getGoalDecls lctxBeforeIntros lctxAfterIntros

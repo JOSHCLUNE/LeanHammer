@@ -38,7 +38,8 @@ def unsatCoreIncludesFactAsString (unsatCoreDerivLeafStrings : Array String) (fa
    information to track facts explicitly passed in as terms), then we could use Zipperposition's unsat core to also minimize the set of lctx facts that are sent to Duper
    (potentially improving `hammer`'s performance on problems with very large local contexts). This behavior should maybe be added as an option (since even if it improves
    `hammer`'s performance on some problems, it will increase the size of the suggested Duper invocations on all problems), but I definitely think this is worth implementing. -/
-/-- **TODO** Write docstring -/
+/-- Uses `unsatCoreDerivLeafStrings` to filter `userFacts` to only include facts that appear in the external prover's unsat core, then passes just those facts to Duper to
+    reconstruct the proof in Lean. -/
 def getDuperCoreLemmas (unsatCoreDerivLeafStrings : Array String) (userFacts : Syntax.TSepArray `term ",") (goalDecls : Array LocalDecl)
   (includeAllLctx : Bool) (duperConfigOptions : Duper.ConfigurationOptions) : TacticM (Array Term × Expr) := do
   Core.checkSystem s!"{decl_name%}"

@@ -130,18 +130,18 @@ def runHammerCore (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser
   /- Assuming `goal` has the form `∀ x1 : t1, ∀ x2 : t2, … ∀ xn : tn, b`, `goalPropHyps` is
      an array of size `n` where the mth element in `goalPropHyps` indicates whether the mth forall
      binder has a `Prop` type. This is used to help create `introNCoreNames` which should use existing
-     binder names for nonProp arguments and newly created names (based on `goalHypPrefix`) for Prop arguments -/
+     binder names for nonProp arguments and newly created names for Prop arguments -/
   let goalPropHyps ← forallTelescope goalType fun xs _ => do xs.mapM (fun x => do pure (← inferType (← inferType x)).isProp)
   for b in goalPropHyps do
     if b then
-      introNCoreNames := introNCoreNames.push (.str .anonymous (configOptions.goalHypPrefix ++ numGoalHyps.repr))
+      introNCoreNames := introNCoreNames.push (.str .anonymous ("h" ++ numGoalHyps.repr))
       numGoalHyps := numGoalHyps + 1
     else -- If fvarId corresponds to a non-sort type, then introduce it using the userName
       introNCoreNames := introNCoreNames.push `_ -- `introNCore` will overwrite this with the existing binder name
   let (_, newGoal) ← introNCore originalMainGoal numBinders introNCoreNames.toList true true
   let [nngoal] ← newGoal.apply (.const ``Classical.byContradiction [])
     | throwError "evalHammer :: Unexpected result after applying Classical.byContradiction"
-  let (_, absurd) ← MVarId.intro nngoal (.str .anonymous configOptions.negGoalLemmaName)
+  let (_, absurd) ← MVarId.intro nngoal (.str .anonymous "negGoal")
   replaceMainGoal [absurd]
   withMainContext do
     let lctxAfterIntros ← getLCtx
@@ -194,12 +194,8 @@ def runHammerCore (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser
           tacticsArr := tacticsArr.push $ ← `(tactic| duper [*] {preprocessing := full})
         else -- coreUserInputFacts.size == 0 && !includeLCtx
           tacticsArr := tacticsArr.push $ ← `(tactic| duper {preprocessing := full})
-
         -- Add tactic sequence suggestion
         let tacticSeq ← `(tacticSeq| $tacticsArr*)
-        /- **TODO** Add a warning if anything gets inadvertently shadowed (e.g. by `negGoal` or an introduced goal hypothesis)
-           Currently, this can't happen because Zipperposition's unsat core is not minimizing the set of lctx facts that are sent to Duper,
-           but a warning will need to be added once that functionality is implemented. -/
         addTryThisTacticSeqSuggestion stxRef tacticSeq (← getRef)
         tryCatchRuntimeEx
           (absurd.assign duperProof)
