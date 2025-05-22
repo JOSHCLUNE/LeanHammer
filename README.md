@@ -45,7 +45,7 @@ Currently, LeanHammer consists of/depends on the following components:
 - **Translation procedure**
   - [Lean-auto](https://github.com/leanprover-community/lean-auto) which serves as an interface to translate from Lean into TPTP and SMT
 - **Automatic theorem provers**
-  - [Zipperposition](https://github.com/sneeuwballen/zipperposition) which is retrieved automatically via [this](https://github.com/leanprover-community/lean-auto/blob/hammer/lakefile.lean#L53) post_update script
+  - [Zipperposition](https://github.com/sneeuwballen/zipperposition) which is retrieved automatically via [this post_update script](https://github.com/leanprover-community/lean-auto/blob/hammer/lakefile.lean#L53)
   - [cvc5](https://github.com/cvc5/cvc5) via the [Lean cvc5 FFI](https://github.com/abdoo8080/lean-cvc5) (Not yet integrated)
 - **Proof search and proof reconstruction tools native to Lean**
   - [Aesop](https://github.com/leanprover-community/aesop)
