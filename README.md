@@ -73,4 +73,10 @@ Each of the `options` supplied to `hammer` have the form `option := value` and a
 
 Each of these options' defaults can be changed with `set_option hammer.<option_name>Default <new default>`. For example, the command that changes the default number of premises passed to Lean-auto from 16 to 32 is `set_option hammer.autoPremisesDefault 32`.
 
-In addition to the above options, LeanHammer uses the `Lean.PremiseSelection` API introduced in Lean 4 core, and therefore can have its premise selection modified with the command `set_premise_selector <myPremiseSelector>`. If no premise selector is specified by the user via this API, then LeanHammer uses the default selector `interleave #[Cloud.premiseSelector, mepoSelector (useRarity := true) (p := 0.6) (c := 0.9)] <|> mepoSelector (useRarity := true) (p := 0.6) (c := 0.9)`. For more information on the interpretation of this selector, as well as information on `Cloud.premiseSelector`'s caching behavior, see [this README](https://github.com/hanwenzhu/premise-selection).
+### Premise Selection
+
+In addition to the above options, LeanHammer uses the `Lean.PremiseSelection` API introduced in Lean 4 core, and therefore can have its premise selection modified with the command `set_premise_selector <myPremiseSelector>`. If no premise selector is specified by the user via this API, then LeanHammer uses the default selector `Cloud.premiseSelector <|> mepoSelector (useRarity := true) (p := 0.6) (c := 0.9)`. For more information on the interpretation of this selector, as well as information on `Cloud.premiseSelector`'s caching behavior, see [this](https://github.com/hanwenzhu/premise-selection) README.
+
+The default premise selection server used by `Cloud.premiseSelector` hosted at `http://leanpremise.net` is intended for individual use. For heavy use cases, (e.g. performing an evaluation of `hammer` on a large number of theorems), we encourage users to use [this](https://github.com/hanwenzhu/lean-premise-server) code to host their own server which can be accessed following the instructions in [this](https://github.com/hanwenzhu/premise-selection) README.
+
+To view the set of premises that are passed to LeanHammer via premise selection, use the command `set_option trace.hammer.premises true`.
