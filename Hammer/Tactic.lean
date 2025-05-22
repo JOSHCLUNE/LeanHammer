@@ -5,6 +5,8 @@ import Qq
 
 open Lean Meta Elab Tactic HammerCore Syntax PremiseSelection Duper Aesop Qq
 
+initialize Lean.registerTraceClass `hammer.premises
+
 namespace Hammer
 
 syntax (name := hammer) "hammer" (ppSpace "[" (term),* "]")? (ppSpace "{"Hammer.configOption,*,?"}")? : tactic
@@ -70,10 +72,10 @@ def evalHammer : Tactic
     else selector goal premiseSelectionConfig
   let premises := premises.map (fun p => p.name)
   let premises ← premises.mapM (fun p => return (← `(term| $(mkIdent p))))
-  trace[hammer.debug] "user input terms: {userInputTerms}"
-  trace[hammer.debug] "premises from premise selector: {premises}"
+  trace[hammer.premises] "user input terms: {userInputTerms}"
+  trace[hammer.premises] "premises from premise selector: {premises}"
   let premises := premises.filter (fun p => !userInputTerms.contains p) -- Remove duplicates between `userInputTerms` and `premises`
-  trace[hammer.debug] "premises from premise selector after removing duplicates in user input terms: {premises}"
+  trace[hammer.premises] "premises from premise selector after removing duplicates in user input terms: {premises}"
   runHammer stxRef ∅ userInputTerms premises true configOptions
 | _ => throwUnsupportedSyntax
 
