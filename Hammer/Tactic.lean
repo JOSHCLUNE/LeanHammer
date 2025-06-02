@@ -59,7 +59,7 @@ def evalHammer : Tactic
     else if configOptions.disableAuto then configOptions.aesopPremises
     else max configOptions.autoPremises configOptions.aesopPremises
   let premiseSelectionConfig : PremiseSelection.Config := {
-    maxSuggestions := maxSuggestions,
+    maxSuggestions := maxSuggestions + userInputTerms.size, -- Add `userInputTerms.size` to ensure there are `maxSuggestions` non-duplicate premises
     caller := `hammer
   }
   -- Get the registered premise selector for premise selection.
