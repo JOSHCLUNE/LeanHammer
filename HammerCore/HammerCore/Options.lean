@@ -19,6 +19,11 @@ register_option hammer.solverDefault : String := {
   descr := "The default value of the solver option"
 }
 
+register_option hammer.solverTimeoutDefault : Nat := {
+  defValue := 10
+  descr := "The default timeout for the solver (in seconds)"
+}
+
 register_option hammer.preprocessingDefault : String := {
   defValue := "aesop"
   descr := "The default value of the preprocessing option"
@@ -57,6 +62,7 @@ register_option hammer.aesopAutoPriorityDefault : Nat := {
 namespace HammerCore
 
 def getHammerSolverDefault (opts : Options) : String := hammer.solverDefault.get opts
+def getHammerSolverTimeoutDefault (opts : Options) : Nat := hammer.solverTimeoutDefault.get opts
 def getPreprocessingDefault (opts : Options) : String := hammer.preprocessingDefault.get opts
 def getDisableAesopDefault (opts : Options) : Bool := hammer.disableAesopDefault.get opts
 def getDisableAutoDefault (opts : Options) : Bool := hammer.disableAutoDefault.get opts
@@ -68,6 +74,10 @@ def getAesopAutoPriorityDefault (opts : Options) : Nat := hammer.aesopAutoPriori
 def getHammerSolverDefaultM : CoreM String := do
   let opts ← getOptions
   return getHammerSolverDefault opts
+
+def getHammerSolverTimeoutDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getHammerSolverTimeoutDefault opts
 
 def getPreprocessingDefaultM : CoreM String := do
   let opts ← getOptions
@@ -163,6 +173,7 @@ def elabBoolLit [Monad m] [MonadError m] (stx : TSyntax `Hammer.bool_lit) : m Bo
     | _ => Elab.throwUnsupportedSyntax
 
 syntax (&"solver" " := " Hammer.solverOption) : Hammer.configOption
+syntax (&"solverTimeout" " := " numLit) : Hammer.configOption
 syntax (&"preprocessing" " := " Hammer.preprocessing) : Hammer.configOption
 syntax (&"disableAuto" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"disableAesop" " := " Hammer.bool_lit) : Hammer.configOption
@@ -173,6 +184,7 @@ syntax (&"aesopAutoPriority" " := " numLit) : Hammer.configOption -- The priorit
 
 structure ConfigurationOptions where
   solver : Solver
+  solverTimeout : Nat
   preprocessing : Preprocessing
   disableAuto : Bool
   disableAesop : Bool
@@ -211,6 +223,7 @@ def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM Confi
 
 def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : TacticM ConfigurationOptions := do
   let mut solverOpt := none
+  let mut solverTimeoutOpt := none
   let mut preprocessingOpt := none
   let mut disableAutoOpt := none
   let mut disableAesopOpt := none
@@ -223,6 +236,9 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| solver := $solverName:Hammer.solverOption) =>
       if solverOpt.isNone then solverOpt ← elabSolverOption solverName
       else throwError "Erroneous invocation of hammer: The solver option has been specified multiple times"
+    | `(Hammer.configOption| solverTimeout := $userSolverTimeout:num) =>
+      if solverTimeoutOpt.isNone then solverTimeoutOpt := some (TSyntax.getNat userSolverTimeout)
+      else throwError "Erroneous invocation of hammer: The solverTimeout option has been specified multiple times"
     | `(Hammer.configOption| preprocessing := $preprocessing:Hammer.preprocessing) =>
       if preprocessingOpt.isNone then preprocessingOpt ← elabPreprocessing preprocessing
       else throwError "Erroneous invocation of hammer: The preprocessing option has been specified multiple times"
@@ -250,6 +266,10 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match solverOpt with
     | none => elabSolverOptionDefault
     | some solver => pure solver
+  let solverTimeout ←
+    match solverTimeoutOpt with
+    | none => getHammerSolverTimeoutDefaultM
+    | some solverTimeout => pure solverTimeout
   let disableAuto ←
     match disableAutoOpt with
     | none => getDisableAutoDefaultM
@@ -281,19 +301,18 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | none => getAesopAutoPriorityDefaultM
     | some aesopAutoPriority => pure aesopAutoPriority
   let configOptions :=
-    {solver := solver, preprocessing := preprocessing, disableAuto := disableAuto, disableAesop := disableAesop, autoPremises := autoPremises,
+    {solver := solver, solverTimeout := solverTimeout, preprocessing := preprocessing, disableAuto := disableAuto, disableAesop := disableAesop, autoPremises := autoPremises,
      aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority}
   let configOptions ← validateConfigOptions configOptions
   return configOptions
 
 def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (configOptions : ConfigurationOptions) (x : m α) : m α :=
-  let timeout := if configOptions.disableAesop then 10 else 1 -- Include a shorter timeout when `aesop` is enabled because `auto` will be called multiple times
   match configOptions.solver with
   | zipperposition_exe =>
     withOptions
       (fun o =>
         let o := o.set `auto.tptp true
-        let o := o.set `auto.tptp.timeout timeout
+        let o := o.set `auto.tptp.timeout configOptions.solverTimeout
         let o := o.set `auto.smt false
         let o := o.set `auto.tptp.premiseSelection true
         let o := o.set `auto.tptp.solver.name "zipperposition_exe"
@@ -304,7 +323,7 @@ def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (configOptio
     withOptions
       (fun o =>
         let o := o.set `auto.tptp true
-        let o := o.set `auto.tptp.timeout timeout
+        let o := o.set `auto.tptp.timeout configOptions.solverTimeout
         let o := o.set `auto.smt false
         let o := o.set `auto.tptp.premiseSelection true
         let o := o.set `auto.tptp.solver.name "zipperposition"
