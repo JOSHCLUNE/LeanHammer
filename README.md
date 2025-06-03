@@ -18,13 +18,17 @@ git = "https://github.com/JOSHCLUNE/LeanHammer"
 rev = "main"
 ```
 
+You must put this *before* the Mathlib requirement; otherwise, you will find Lean recompiling large parts of Mathlib later on.
+
 To use LeanHammer in an existing project with a `lakefile.lean` file, add the following line to your list of dependencies in `lakefile.lean`:
 
 ```lean
-require hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "main"
+require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "main"
 ```
 
-After LeanHammer has been added as a dependency to your project, run `lake update` or `lake update hammer` to retrieve the Zipperposition executable that comes with LeanHammer (this executable will be stored in the existing project's `.lake` directory). Then, the following example should compile without any warnings or errors:
+Once again, you must do this *before* requiring Mathlib.
+
+After LeanHammer has been added as a dependency to your project, run `lake update` or `lake update hammer` to retrieve the Zipperposition executable that comes with LeanHammer (this executable will be stored in the existing project's `.lake` directory). You can then optionally use `lake build` to compile the hammer components, which takes a few minutes. After that, the following example should compile without any warnings or errors:
 
 ```lean
 import Hammer
@@ -34,6 +38,8 @@ import Hammer
 example : True := by
   hammer {aesopPremises := 0, autoPremises := 0}
 ```
+
+If you skip the `lake build` step, the hammer components will be compiled the first time you import the hammer.
 
 ## Components
 
