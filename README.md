@@ -86,3 +86,14 @@ In addition to the above options, LeanHammer uses the `Lean.PremiseSelection` AP
 The default premise selection server used by `Cloud.premiseSelector` hosted at `http://leanpremise.net` is intended for individual use. For heavy use cases, (e.g. performing an evaluation of `hammer` on a large number of theorems), we encourage users to use [this code](https://github.com/hanwenzhu/lean-premise-server) to host their own server which can be accessed following the instructions in [this README](https://github.com/hanwenzhu/premise-selection).
 
 To view the set of premises that are passed to LeanHammer via premise selection, use the command `set_option trace.hammer.premises true`.
+
+### Debugging
+
+You can use the following to get more information:
+
+- `set_option trace.hammer.premises true` to display the list of premises retrieved
+- `set_option trace.hammer.debug true` to display what is passed to Zipperposition and the minimized set sent to Duper if it succeeds
+- `set_option trace.auto.tptp.printQuery true` to display the query sent to Zipperposition
+- `set_option trace.auto.tptp.result true` to display the response from Zipperposition
+- `set_option trace.aesop true` to display the Aesop search tree
+
