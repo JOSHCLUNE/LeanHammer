@@ -2,7 +2,7 @@
 
 LeanHammer is an automated reasoning tool for Lean which aims to bring together multiple proof search and reconstruction techniques and combine them into one tool. The `hammer` tactic provided by LeanHammer utilizes this variety of techniques to search for a proof of the current goal, then constructs a suggestion for a tactic script which can replace the `hammer` invocation.
 
-LeanHammer is in an early stage of its development and therefore may be subject to breaking changes.
+LeanHammer is in an early stage of its development and therefore may be subject to breaking changes. It is currently compatible with Lean v4.20.
 
 Pull requests and issues are welcome.
 
