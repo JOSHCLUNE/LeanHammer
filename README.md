@@ -40,9 +40,9 @@ example : True := by
 
 If you skip the `lake build` step, the hammer components will be compiled the first time you import the hammer.
 
-### Note for M4 Macs
+### Note for Macs
 
-If you are using a new Mac with an M4 chip, Zipperposition may not work out of the box. To test this, in the top folder, try this:
+If you are using a Mac with an Apple silicon chip, Zipperposition may not work out of the box. To test this, try this from the top folder of your project:
 ```
   .lake/packages/auto/.lake/build/zipperposition-bin-macos-big-sur.exe --version
 ```
