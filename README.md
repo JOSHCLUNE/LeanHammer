@@ -6,7 +6,6 @@ LeanHammer is in an early stage of its development and therefore may be subject 
 
 Pull requests and issues are welcome.
 
-
 ## Adding LeanHammer to Your Project
 
 To use LeanHammer in an existing project with a `lakefile.toml` file, add the following lines to your list of dependencies in `lakefile.toml`:
@@ -86,6 +85,18 @@ In addition to the above options, LeanHammer uses the `Lean.PremiseSelection` AP
 The default premise selection server used by `Cloud.premiseSelector` hosted at `http://leanpremise.net` is intended for individual use. For heavy use cases, (e.g. performing an evaluation of `hammer` on a large number of theorems), we encourage users to use [this code](https://github.com/hanwenzhu/lean-premise-server) to host their own server which can be accessed following the instructions in [this README](https://github.com/hanwenzhu/premise-selection).
 
 To view the set of premises that are passed to LeanHammer via premise selection, use the command `set_option trace.hammer.premises true`.
+
+### Note for M4 Macs
+
+If you are using a new Mac with an M4 chip, Zipperposition may not work out of the box. To test this, in the top folder, try this:
+```
+  .lake/packages/auto/.lake/build/zipperposition-bin-macos-big-sur.exe --version
+```
+If it doesn't successfully return the version,
+```
+  softwareupdate --install-rosetta
+```
+should fix it.
 
 ### Debugging
 
