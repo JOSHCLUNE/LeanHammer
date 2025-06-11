@@ -78,6 +78,13 @@ Each of the `options` supplied to `hammer` have the form `option := value` and a
 
 Each of these options' defaults can be changed with `set_option hammer.<option_name>Default <new default>`. For example, the command that changes the default number of premises passed to Lean-auto from 16 to 32 is `set_option hammer.autoPremisesDefault 32`.
 
+### Examples
+
+You can use:
+- `hammer` to run the full pipeline
+- `hammer {disableAuto := true}` to try Aesop with premise selection
+- `hammer {disableAesop := true, preprocessing=no_preprocessing}` to try Zipperposition and Duper with premise selection
+
 ### Premise Selection
 
 In addition to the above options, LeanHammer uses the `Lean.PremiseSelection` API introduced in Lean 4 core, and therefore can have its premise selection modified with the command `set_premise_selector <myPremiseSelector>`. If no premise selector is specified by the user via this API, then LeanHammer uses the default selector `Cloud.premiseSelector <|> mepoSelector (useRarity := true) (p := 0.6) (c := 0.9)`. For more information on the interpretation of this selector, as well as information on `Cloud.premiseSelector`'s caching behavior, see [this README](https://github.com/hanwenzhu/premise-selection).
