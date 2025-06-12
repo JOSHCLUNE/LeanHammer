@@ -101,7 +101,7 @@ You can use:
 
 ### Premise Selection
 
-In addition to the above options, LeanHammer uses the `Lean.PremiseSelection` API introduced in Lean 4 core. In particular, you may use premise selection by:
+In addition to the above options, LeanHammer has a premise selection component, based on the `Lean.PremiseSelection` API introduced in Lean 4 core. You may also use the premise selection component individually by:
 
 ```lean
 import PremiseSelection
@@ -110,7 +110,7 @@ example : True := by
   premises
 ```
 
-LeanHammer's premise selection can be modified with the command `set_premise_selector <myPremiseSelector>`. If no premise selector is specified by the user via this API, then LeanHammer uses the default selector `Cloud.premiseSelector <|> mepoSelector (useRarity := true) (p := 0.6) (c := 0.9)`. For more information on the interpretation of this selector, as well as information on `Cloud.premiseSelector`'s caching behavior, see [this README](https://github.com/hanwenzhu/premise-selection).
+The premise selector can be modified with the command `set_premise_selector <myPremiseSelector>`. If no premise selector is specified by the user via this API, then LeanHammer uses the default selector `Cloud.premiseSelector <|> mepoSelector (useRarity := true) (p := 0.6) (c := 0.9)`. For more information on the interpretation of this selector, as well as information on `Cloud.premiseSelector`'s caching behavior, see the [premise-selection](https://github.com/hanwenzhu/premise-selection) repository.
 
 The default premise selection server used by `Cloud.premiseSelector` hosted at `http://leanpremise.net` is intended for individual use. For heavy use cases, (e.g. performing an evaluation of `hammer` on a large number of theorems), we encourage users to use [this code](https://github.com/hanwenzhu/lean-premise-server) to host their own server which can be accessed following the instructions in [this README](https://github.com/hanwenzhu/premise-selection).
 
