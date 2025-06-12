@@ -70,7 +70,7 @@ def evalHammer : Tactic
   let premises ←
     if maxSuggestions == 0 then pure #[] -- If `maxSuggestions` is 0, then we don't need to waste time calling the premise selector
     else selector goal premiseSelectionConfig
-  let premises := premises.map (fun p => p.name)
+  let premises ← premises.mapM (fun p => unresolveNameGlobal p.name)
   let premises ← premises.mapM (fun p => return (← `(term| $(mkIdent p))))
   trace[hammer.premises] "user input terms: {userInputTerms}"
   trace[hammer.premises] "premises from premise selector: {premises}"
