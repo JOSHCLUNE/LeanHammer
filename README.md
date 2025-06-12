@@ -44,11 +44,11 @@ If you skip the `lake build` step, the hammer components will be compiled the fi
 
 If you are using a Mac with an Apple silicon chip, Zipperposition may not work out of the box. To test this, try this from the top folder of your project:
 ```
-  .lake/packages/auto/.lake/build/zipperposition-bin-macos-big-sur.exe --version
+.lake/packages/auto/.lake/build/zipperposition-bin-macos-big-sur.exe --version
 ```
 If it doesn't successfully return the version,
 ```
-  softwareupdate --install-rosetta
+softwareupdate --install-rosetta
 ```
 should fix it.
 
@@ -70,6 +70,8 @@ Currently, LeanHammer consists of/depends on the following components:
   - [Lean-SMT](https://github.com/ufmg-smite/lean-smt/tree/main) (Not yet integrated)
 
 The above list only consists of components that LeanHammer currently consists of/depends on. As additional components are added and integrated, they will be added to the above list.
+
+For more details about the premise selection component of LeanHammer, please refer to our paper [*Premise Selection for a Lean Hammer*](https://arxiv.org/abs/2506.07477) (Thomas Zhu, Joshua Clune, Jeremy Avigad, Albert Jiang, Sean Welleck).
 
 ## Usage
 
@@ -95,11 +97,20 @@ Each of these options' defaults can be changed with `set_option hammer.<option_n
 You can use:
 - `hammer` to run the full pipeline
 - `hammer {disableAuto := true}` to try Aesop with premise selection
-- `hammer {disableAesop := true, preprocessing=no_preprocessing}` to try Zipperposition and Duper with premise selection
+- `hammer {disableAesop := true, preprocessing := no_preprocessing}` to try Zipperposition and Duper with premise selection
 
 ### Premise Selection
 
-In addition to the above options, LeanHammer uses the `Lean.PremiseSelection` API introduced in Lean 4 core, and therefore can have its premise selection modified with the command `set_premise_selector <myPremiseSelector>`. If no premise selector is specified by the user via this API, then LeanHammer uses the default selector `Cloud.premiseSelector <|> mepoSelector (useRarity := true) (p := 0.6) (c := 0.9)`. For more information on the interpretation of this selector, as well as information on `Cloud.premiseSelector`'s caching behavior, see [this README](https://github.com/hanwenzhu/premise-selection).
+In addition to the above options, LeanHammer uses the `Lean.PremiseSelection` API introduced in Lean 4 core. In particular, you may use premise selection by:
+
+```lean
+import PremiseSelection
+
+example : True := by
+  premises
+```
+
+LeanHammer's premise selection can be modified with the command `set_premise_selector <myPremiseSelector>`. If no premise selector is specified by the user via this API, then LeanHammer uses the default selector `Cloud.premiseSelector <|> mepoSelector (useRarity := true) (p := 0.6) (c := 0.9)`. For more information on the interpretation of this selector, as well as information on `Cloud.premiseSelector`'s caching behavior, see [this README](https://github.com/hanwenzhu/premise-selection).
 
 The default premise selection server used by `Cloud.premiseSelector` hosted at `http://leanpremise.net` is intended for individual use. For heavy use cases, (e.g. performing an evaluation of `hammer` on a large number of theorems), we encourage users to use [this code](https://github.com/hanwenzhu/lean-premise-server) to host their own server which can be accessed following the instructions in [this README](https://github.com/hanwenzhu/premise-selection).
 
@@ -114,4 +125,3 @@ You can use the following to get more information:
 - `set_option trace.auto.tptp.printQuery true` to display the query sent to Zipperposition
 - `set_option trace.auto.tptp.result true` to display the response from Zipperposition
 - `set_option trace.aesop true` to display the Aesop search tree
-
