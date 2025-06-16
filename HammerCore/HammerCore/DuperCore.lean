@@ -57,7 +57,7 @@ def getDuperCoreLemmas (unsatCoreDerivLeafStrings : Array String) (userFacts : S
     try
       Core.checkSystem s!"{decl_name%} :: runDuperPortfolioMode"
       trace[hammer.debug] "{decl_name%} :: Calling runDuperPortfolioMode with formulas: {formulas}"
-      runDuperPortfolioMode formulas.toList [] none duperConfigOptions none
+      runDuperPortfolioMode formulas.toList [] duperConfigOptions none
     catch e =>
       throwError m!"{decl_name%} :: Unable to use hints from external solver to reconstruct proof. " ++
                   m!"Duper threw the following error:\n\n{e.toMessageData}"

@@ -33,7 +33,7 @@ def duperNativeSolverFunc (lemmas : Array Lemma) (_inhLemmas : Array Lemma) : Me
   let extraFormulas := extraFormulas.map (fun f => (f.1, f.2.1, f.2.2.1, f.2.2.2, none))
   trace[hammer.debug] "Formulas passed to Duper after filtering: {formulas.map (fun x => x.1)}"
   trace[hammer.debug] "Extra formulas passed to Duper after filtering: {extraFormulas.map (fun x => x.1)}"
-  Duper.runDuperPortfolioMode formulas extraFormulas .none
+  Duper.runDuperPortfolioMode formulas extraFormulas
     { portfolioMode := true,
       portfolioInstance := none,
       inhabitationReasoning := none,
