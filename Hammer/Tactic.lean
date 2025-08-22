@@ -11,11 +11,6 @@ namespace Hammer
 
 syntax (name := hammer) "hammer" (ppSpace "[" (term),* "]")? (ppSpace "{"Hammer.configOption,*,?"}")? : tactic
 
-macro_rules
-| `(tactic| hammer) => `(tactic| hammer [] {}) -- Neither lemmas nor config options
-| `(tactic| hammer [$lemmas,*]) => `(tactic| hammer [$lemmas,*] {}) -- Lemmas only
-| `(tactic| hammer {$configOptions,*}) => `(tactic| hammer [] {$configOptions,*}) -- Config options only
-
 def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
   (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit := withMainContext do
   let aesopAutoPriority := configOptions.aesopAutoPriority
@@ -33,7 +28,7 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
     runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
   else if configOptions.disableAuto then
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
-      evalTactic (← `(tactic| aesop? $addIdentStxs*))
+      Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
   else
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
       let formulas ← withDuperOptions $ collectAssumptions autoPremises false #[]
@@ -44,10 +39,9 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       let ruleTacDecl := mkDefinitionValEx `instantiatedHammerCoreRuleTac [] ruleTacType ruleTacVal ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedHammerCoreRuleTac]
       addAndCompile $ Declaration.defnDecl ruleTacDecl
       let ruleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedHammerCoreRuleTac)))
-      evalTactic (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% tactic $ruleTacStx)))
+      Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% tactic $ruleTacStx)))
 
-@[tactic hammer]
-def evalHammer : Tactic
+def evalHammerWithArgs : Tactic
 | `(tactic| hammer%$stxRef [$userInputTerms,*] {$configOptions,*}) => withoutModifyingEnv do
   withMainContext do
   withOptions (fun o => o.set `linter.deprecated false) do
@@ -77,6 +71,16 @@ def evalHammer : Tactic
   let premises := premises.filter (fun p => !userInputTerms.contains p) -- Remove duplicates between `userInputTerms` and `premises`
   trace[hammer.premises] "premises from premise selector after removing duplicates in user input terms: {premises}"
   runHammer stxRef ∅ userInputTerms premises true configOptions
+| _ => throwUnsupportedSyntax
+
+-- Note, we no longer use `macro_rules` to process the cases where `hammer` is not given all of its arguments because `macro_rules` appears to
+-- interfere with the tactic suggestions that `hammer` produces.
+@[tactic hammer]
+def evalHammer : Tactic
+| `(tactic| hammer) => do evalHammerWithArgs $ ← `(tactic| hammer [] {})
+| `(tactic| hammer [$userInputTerms,*]) => do evalHammerWithArgs $ ← `(tactic| hammer [$userInputTerms,*] {})
+| `(tactic| hammer {$configOptions,*}) => do evalHammerWithArgs $ ← `(tactic| hammer [] {$configOptions,*})
+| `(tactic| hammer [$userInputTerms,*] {$configOptions,*}) => do evalHammerWithArgs $ ← `(tactic| hammer [$userInputTerms,*] {$configOptions,*})
 | _ => throwUnsupportedSyntax
 
 end Hammer
