@@ -1,44 +1,53 @@
 # LeanHammer
 
-LeanHammer is an automated reasoning tool for Lean which aims to bring together multiple proof search and reconstruction techniques and combine them into one tool. The `hammer` tactic provided by LeanHammer utilizes this variety of techniques to search for a proof of the current goal, then constructs a suggestion for a tactic script which can replace the `hammer` invocation.
+LeanHammer is an automated reasoning tool for Lean that brings together multiple proof search and reconstruction techniques and combines them into one tool. The `hammer` tactic provided by LeanHammer uses a variety of techniques to search for a proof of the current goal, then constructs a suggestion for a tactic script which can replace the `hammer` invocation.
 
-LeanHammer is in an early stage of its development and therefore may be subject to breaking changes. It is currently compatible with Lean v4.20.
+LeanHammer is in an early stage of its development and is therefore subject to breaking changes. There are currently versions of the hammer that are compatible with Lean `v4.20.0`, `v4.21.0`, and `v4.22.0`, respectively, and the corresponding versions of Mathlib.
 
 Pull requests and issues are welcome.
 
 ## Adding LeanHammer to Your Project
 
-To use LeanHammer in an existing project with a `lakefile.toml` file, add the following lines to your list of dependencies in `lakefile.toml`:
+To add LeanHammer for v4.22.0 to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
 
 ```toml
 [[require]]
 name = "Hammer"
 git = "https://github.com/JOSHCLUNE/LeanHammer"
-rev = "main"
+rev = "v4.22.0"
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.22.0"
+```
+The file `lean-toolchain` should contain the following:
+```
+leanprover/lean4:v4.22.0
 ```
 
-You must put this *before* the Mathlib requirement; otherwise, you will find Lean recompiling large parts of Mathlib later on.
-
-To use LeanHammer in an existing project with a `lakefile.lean` file, add the following line to your list of dependencies in `lakefile.lean`:
+If you have a project with a `lakefile.lean` instead of `lakefile.toml`, you can use this instead:
 
 ```lean
-require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "main"
+require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "v4.22.0"
+
+require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.22.0"
 ```
 
-Once again, you must do this *before* requiring Mathlib.
-
-After LeanHammer has been added as a dependency to your project, run `lake update` or `lake update hammer` to retrieve the Zipperposition executable that comes with LeanHammer (this executable will be stored in the existing project's `.lake` directory). You can then optionally use `lake build` to compile the hammer components, which takes a few minutes. After that, the following example should compile without any warnings or errors:
+Then use `lake update` to fetch the hammer and the corresponding versions of Lean and Mathlib. This also retrieves the Zipperposition executable that comes with LeanHammer. (This executable will be stored in the existing project's `.lake` directory.) The following example should then compile without any warnings or errors:
 
 ```lean
 import Hammer
 
--- Setting `aesopPremises` and `autoPremises` to 0 to bypass premise selection
--- which is slow on its first uncached invocation
 example : True := by
-  hammer {aesopPremises := 0, autoPremises := 0}
+  hammer
 ```
 
-If you skip the `lake build` step, the hammer components will be compiled the first time you import the hammer.
+The first time you `import Hammer`, Lake has to build the hammer component, which takes a few minutes, but after that, you can start hammering away.
+
+If you use a version of Mathlib that differs from the most recent one, the premise selection server may have to calculate embeddings for the theorems it doesn't have. This can take a little while, but the server can use cached embeddings after that. You can test the hammer without premise selection by replacing `hammer` by `hammer {aesopPremises := 0, autoPremises := 0}` in the example above.
+
+You are free to try to use a version of the hammer with a nearby version of Lean and Mathlib, but there are no guarantees it will work. As explained below, the hammer has several dependencies, and they break often as Lean changes. If you add the Hammer to an existing project and don't use `lake update`, you should use `lake update hammer` to fetch the hammer and Zipperposition. You should also put the `Hammer` dependency before the `mathlib` dependency in `lakefile.toml` or `lakefil.lean`: Mathlib and LeanHammer share a dependency on `batteries`, and unless you favor Mathlib's version, you will end up recompiling Mathlib.
 
 ### Note for Macs
 
