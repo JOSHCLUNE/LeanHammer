@@ -59,7 +59,7 @@ def evalHammerWithArgs : Tactic
   -- Get the registered premise selector for premise selection.
   -- If none registered, then use the cloud premise selector by default.
   let selector := premiseSelectorExt.getState (← getEnv)
-  let defaultSelector := Cloud.premiseSelector <|> mepoSelector (useRarity := true) (p := 0.6) (c := 0.9)
+  let defaultSelector := Cloud.premiseSelector <|> mepoSelector (useRarity := false) (p := 0.6) (c := 0.9)
   let selector := selector.getD defaultSelector
   let premises ←
     if maxSuggestions == 0 then pure #[] -- If `maxSuggestions` is 0, then we don't need to waste time calling the premise selector
