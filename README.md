@@ -2,36 +2,36 @@
 
 LeanHammer is an automated reasoning tool for Lean that brings together multiple proof search and reconstruction techniques and combines them into one tool. The `hammer` tactic provided by LeanHammer uses a variety of techniques to search for a proof of the current goal, then constructs a suggestion for a tactic script which can replace the `hammer` invocation.
 
-LeanHammer is in an early stage of its development and is therefore subject to breaking changes. There are currently versions of the hammer that are compatible with Lean `v4.20.0`, `v4.21.0`, and `v4.22.0`, respectively, and the corresponding versions of Mathlib.
+LeanHammer is in an early stage of its development and is therefore subject to breaking changes. There are currently versions of the hammer that are compatible with the stable versions of Lean from `v4.20.0` through `v4.23.0` (and the corresponding versions of Mathlib).
 
 Pull requests and issues are welcome.
 
 ## Adding LeanHammer to Your Project
 
-To add LeanHammer for v4.22.0 to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
+To add LeanHammer for v4.23.0 to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
 
 ```toml
 [[require]]
 name = "Hammer"
 git = "https://github.com/JOSHCLUNE/LeanHammer"
-rev = "v4.22.0"
+rev = "v4.23.0"
 
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.22.0"
+rev = "v4.23.0"
 ```
 The file `lean-toolchain` should contain the following:
 ```
-leanprover/lean4:v4.22.0
+leanprover/lean4:v4.23.0
 ```
 
 If you have a project with a `lakefile.lean` instead of `lakefile.toml`, you can use this instead:
 
 ```lean
-require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "v4.22.0"
+require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "v4.23.0"
 
-require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.22.0"
+require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.23.0"
 ```
 
 Then use `lake update` to fetch the hammer and the corresponding versions of Lean and Mathlib. This also retrieves the Zipperposition executable that comes with LeanHammer. (This executable will be stored in the existing project's `.lake` directory.) The following example should then compile without any warnings or errors:
@@ -119,7 +119,7 @@ example : True := by
   premises
 ```
 
-The premise selector can be modified with the command `set_premise_selector <myPremiseSelector>`. If no premise selector is specified by the user via this API, then LeanHammer uses the default selector `Cloud.premiseSelector <|> mepoSelector (useRarity := true) (p := 0.6) (c := 0.9)`. For more information on the interpretation of this selector, as well as information on `Cloud.premiseSelector`'s caching behavior, see the [premise-selection](https://github.com/hanwenzhu/premise-selection) repository.
+The premise selector can be modified with the command `set_premise_selector <myPremiseSelector>`. If no premise selector is specified by the user via this API, then LeanHammer uses the default selector `Cloud.premiseSelector <|> mepoSelector (useRarity := false) (p := 0.6) (c := 0.9)`. For more information on the interpretation of this selector, as well as information on `Cloud.premiseSelector`'s caching behavior, see the [premise-selection](https://github.com/hanwenzhu/premise-selection) repository.
 
 The default premise selection server used by `Cloud.premiseSelector` hosted at `http://leanpremise.net` is intended for individual use. For heavy use cases, (e.g. performing an evaluation of `hammer` on a large number of theorems), we encourage users to use [this code](https://github.com/hanwenzhu/lean-premise-server) to host their own server which can be accessed following the instructions in [this README](https://github.com/hanwenzhu/premise-selection).
 
