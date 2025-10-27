@@ -23,7 +23,7 @@ rev = "v4.24.0"
 ```
 The file `lean-toolchain` should contain the following:
 ```
-leanprover/lean4:v4.23.0
+leanprover/lean4:v4.24.0
 ```
 
 If you have a project with a `lakefile.lean` instead of `lakefile.toml`, you can use this instead:
