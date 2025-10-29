@@ -3,6 +3,8 @@ import Auto
 
 open Lean Parser Elab Tactic
 
+initialize Lean.registerTraceClass `hammer.debug
+
 -- An option to specify the external prover that `hammer` uses
 declare_syntax_cat Hammer.solverOption (behavior := symbol)
 -- An option to specify the preprocessing that `hammer` uses
@@ -203,10 +205,10 @@ syntax (&"solverTimeout" " := " numLit) : Hammer.configOption
 syntax (&"preprocessing" " := " Hammer.preprocessing) : Hammer.configOption
 syntax (&"disableDuper" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"disableAesop" " := " Hammer.bool_lit) : Hammer.configOption
-syntax (&"disableLeanSmt" " := " Hammer.bool_lit) : Hammer.configOption
+syntax (&"disableSmt" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"duperPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to the auto/zipperposition/duper pipeline (default: 16)
 syntax (&"aesopPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `aesop` (default: 32)
-syntax (&"leanSmtPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to lean-smt (default: 16)
+syntax (&"smtPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to lean-smt (default: 16)
 syntax (&"aesopPremisePriority" " := " numLit) : Hammer.configOption -- The priority of premises sent to `aesop` (default: 20)
 syntax (&"aesopDuperPriority" " := " numLit) : Hammer.configOption -- The priority of calls to the auto/zipperposition/duper pipeline within `aesop` (default: 10)
 syntax (&"leanSmtPriority" " := " numLit) : Hammer.configOption -- The priority of calls to lean-smt (default: 10)
@@ -277,7 +279,7 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| disableAesop := $disableAesopBoolLit:Hammer.bool_lit) =>
       if disableAesopOpt.isNone then disableAesopOpt := some $ ← elabBoolLit disableAesopBoolLit
       else throwError "Erroneous invocation of hammer: The disableAesop option has been specified multiple times"
-    | `(Hammer.configOption| disableLeanSmt := $disableSmtBoolLit:Hammer.bool_lit) =>
+    | `(Hammer.configOption| disableSmt := $disableSmtBoolLit:Hammer.bool_lit) =>
       if disableSmtOpt.isNone then disableSmtOpt := some $ ← elabBoolLit disableSmtBoolLit
       else throwError "Erroneous invocation of hammer: The disableLeanSmt option has been specified multiple times"
     | `(Hammer.configOption| duperPremises := $userDuperPremises:num) =>
@@ -286,9 +288,9 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| aesopPremises := $userAesopPremises:num) =>
       if aesopPremisesOpt.isNone then aesopPremisesOpt := some (TSyntax.getNat userAesopPremises)
       else throwError "Erroneous invocation of hammer: The aesopPremises option has been specified multiple times"
-    | `(Hammer.configOption| leanSmtPremises := $userSmtPremises:num) =>
+    | `(Hammer.configOption| smtPremises := $userSmtPremises:num) =>
       if smtPremisesOpt.isNone then smtPremisesOpt := some (TSyntax.getNat userSmtPremises)
-      else throwError "Erroneous invocation of hammer: The leanSmtPremises option has been specified multiple times"
+      else throwError "Erroneous invocation of hammer: The smtPremises option has been specified multiple times"
     | `(Hammer.configOption| aesopPremisePriority := $userAesopPremisePriority:num) =>
       if aesopPremisePriorityOpt.isNone then aesopPremisePriorityOpt := some (TSyntax.getNat userAesopPremisePriority)
       else throwError "Erroneous invocation of hammer: The aesopPremisePriority option has been specified multiple times"

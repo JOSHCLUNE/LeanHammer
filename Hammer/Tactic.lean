@@ -22,14 +22,21 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
     -- **TODO** Add support for terms that aren't just names of premises
     let pFeature ← `(Aesop.feature| $(mkIdent p.raw.getId):ident)
     addIdentStxs := addIdentStxs.push (← `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit aesopPremisePriority):num % $pFeature:Aesop.feature)))
-  if configOptions.disableAesop && configOptions.disableDuper then
-    throwError "Erroneous invocation of hammer: The aesop and duper options cannot both be disabled"
-  else if configOptions.disableAesop then
+  match configOptions.disableAesop, configOptions.disableDuper, configOptions.disableSmt with
+  | true, true, true =>
+    throwError "Erroneous invocation of hammer: At least one of the aesop, duper, and smt options must be enabled"
+  | true, true, false =>
+    HammerCore.smtPipeline stxRef simpLemmas premises includeLCtx configOptions
+  | true, false, true =>
     HammerCore.runDuper stxRef simpLemmas duperPremises includeLCtx configOptions
-  else if configOptions.disableDuper then
+  | true, false, false =>
+    throwError "Parallel execution of duper and smt is not yet implemented"
+  | false, true, true =>
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
       Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
-  else
+  | false, true, false =>
+    throwError "Lean-smt/Aesop integration not yet implemented"
+  | false, false, true =>
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
       let formulas ← withDuperOptions $ collectAssumptions duperPremises false #[]
       let formulas : List (Expr × Expr × Array Name × Bool × String) := -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
@@ -40,6 +47,8 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       addAndCompile $ Declaration.defnDecl ruleTacDecl
       let ruleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedHammerCoreRuleTac)))
       Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopDuperPriority):num% tactic $ruleTacStx)))
+  | false, false, false =>
+    throwError "Lean-smt/Aesop integration not yet implemented"
 
 def evalHammerWithArgs : Tactic
 | `(tactic| hammer%$stxRef [$userInputTerms,*] {$configOptions,*}) => withoutModifyingEnv do
@@ -48,10 +57,16 @@ def evalHammerWithArgs : Tactic
   let goal ← getMainGoal
   let userInputTerms : Array Term := userInputTerms
   let configOptions ← parseConfigOptions configOptions
-  let maxSuggestions :=
-    if configOptions.disableAesop then configOptions.duperPremises
-    else if configOptions.disableDuper then configOptions.aesopPremises
-    else max configOptions.duperPremises configOptions.aesopPremises
+  let aesopPremises :=
+    if configOptions.disableAesop then 0
+    else configOptions.aesopPremises
+  let smtPremises :=
+    if configOptions.disableSmt then 0
+    else configOptions.smtPremises
+  let duperPremises :=
+    if configOptions.disableDuper then 0
+    else configOptions.duperPremises
+  let maxSuggestions := max aesopPremises (max smtPremises duperPremises)
   let premiseSelectionConfig : PremiseSelection.Config := {
     maxSuggestions := maxSuggestions + userInputTerms.size, -- Add `userInputTerms.size` to ensure there are `maxSuggestions` non-duplicate premises
     caller := `hammer
