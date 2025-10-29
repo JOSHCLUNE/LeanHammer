@@ -1,9 +1,64 @@
-import HammerCore.DuperCore
+import Duper
 import HammerCore.Options
 
 open Lean Meta Parser Elab Tactic Auto Duper Syntax
 
+initialize Lean.registerTraceClass `hammer.debug
+
 namespace HammerCore
+
+/-- Checks `unsatCoreDerivLeafStrings` to see if it contains a string that matches `fact`. -/
+def unsatCoreIncludesFact (unsatCoreDerivLeafStrings : Array String) (fact : Term) : Bool := Id.run do
+  unsatCoreDerivLeafStrings.anyM
+    (fun factStr => do
+      -- **TODO** Modify `Duper.collectAssumptions` to output a leaf containing `s!"❰{factStx}❱"` so that we only need to check if `factStr` contains `s!"❰{fact}❱"`
+      if factStr == s!"❰{fact}❱" then pure true
+      else
+        let [_isFromGoal, _includeInSetOfSupport, factStrStx] := factStr.splitOn ", "
+          | pure false
+        pure $ factStrStx == s!"{fact}"
+    )
+
+/-- Like `unsatCoreIncludesFact` but takes `fact` as a String instead of a Term. -/
+def unsatCoreIncludesFactAsString (unsatCoreDerivLeafStrings : Array String) (fact : String) : Bool := Id.run do
+  unsatCoreDerivLeafStrings.anyM
+    (fun factStr => do
+      -- **TODO** Modify `Duper.collectAssumptions` to output a leaf containing `s!"❰{factStx}❱"` so that we only need to check if `factStr` contains `s!"❰{fact}❱"`
+      if factStr == s!"❰{fact}❱" then pure true
+      else
+        let [_isFromGoal, _includeInSetOfSupport, factStrStx] := factStr.splitOn ", "
+          | pure false
+        pure $ factStrStx == s!"{fact}"
+    )
+
+/- **TODO** If `Duper.formulasToAutoLemmas` were modified to include identifier information for fVarIds from the local context (rather than just include identifier
+   information to track facts explicitly passed in as terms), then we could use Zipperposition's unsat core to also minimize the set of lctx facts that are sent to Duper
+   (potentially improving `hammer`'s performance on problems with very large local contexts). This behavior should maybe be added as an option (since even if it improves
+   `hammer`'s performance on some problems, it will increase the size of the suggested Duper invocations on all problems), but I definitely think this is worth implementing. -/
+/-- Uses `unsatCoreDerivLeafStrings` to filter `userFacts` to only include facts that appear in the external prover's unsat core, then passes just those facts to Duper to
+    reconstruct the proof in Lean. -/
+def getDuperCoreLemmas (unsatCoreDerivLeafStrings : Array String) (userFacts : Syntax.TSepArray `term ",") (goalDecls : Array LocalDecl)
+  (includeAllLctx : Bool) (duperConfigOptions : Duper.ConfigurationOptions) : TacticM (Array Term × Expr) := do
+  Core.checkSystem s!"{decl_name%}"
+  -- Filter `userFacts` to only include facts that appear in the extnernal prover's unsat core
+  let userFacts : Array Term := userFacts
+  let mut coreUserFacts := #[]
+  for factStx in userFacts do
+    if unsatCoreIncludesFact unsatCoreDerivLeafStrings factStx then
+      coreUserFacts := coreUserFacts.push factStx
+  -- Build `formulas` to pass into `runDuperPortfolioMode`
+  trace[hammer.debug] "{decl_name%} :: Collecting assumptions. coreUserFacts: {coreUserFacts}"
+  let mut formulas := (← collectAssumptions coreUserFacts includeAllLctx goalDecls).toArray
+  -- Try to reconstruct the proof using `runDuperPortfolioMode`
+  let prf ←
+    try
+      Core.checkSystem s!"{decl_name%} :: runDuperPortfolioMode"
+      trace[hammer.debug] "{decl_name%} :: Calling runDuperPortfolioMode with formulas: {formulas}"
+      runDuperPortfolioMode formulas.toList [] none duperConfigOptions none
+    catch e =>
+      throwError m!"{decl_name%} :: Unable to use hints from external solver to reconstruct proof. " ++
+                  m!"Duper threw the following error:\n\n{e.toMessageData}"
+  pure (coreUserFacts, prf)
 
 /-- Given a Syntax.TSepArray of facts provided by the user (which may include `*` to indicate that hammer should read in the
     full local context) `removeHammerStar` returns the Syntax.TSepArray with `*` removed and a boolean that indicates whether `*`
@@ -83,14 +138,15 @@ def errorIsProofFitError (e : Exception) : IO Bool := do
   let eStr ← e.toMessageData.toString
   return "hammer successfully translated the problem and reconstructed an external prover's proof, but encountered an issue in applying said proof.".isPrefixOf eStr
 
-def runHammerCore (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
+/-- This function runs just the Lean-auto/Zipperposition/Duper pipeline. -/
+def runDuper (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
   (premises : TSepArray `term ",") (includeLCtx : Bool) (configOptions : ConfigurationOptions) : TacticM Unit := withMainContext do
   Core.checkSystem s!"{decl_name%}"
   let preprocessingSuggestion ←
     tryCatchRuntimeEx (do
       match configOptions.preprocessing with
       | Preprocessing.no_preprocessing => pure #[] -- No preprocessing
-      | Preprocessing.aesop => pure #[] -- Aesop's integration comes prior to calling `hammerCore`, so no preprocessing within `hammerCore` is needed
+      | Preprocessing.aesop => throwError "{decl_name%} :: Aesop preprocessing is not compatible with {decl_name%}"
       | Preprocessing.simp_target =>
         let goalsBeforeSimpCall ← getGoals
         evalTactic (← `(tactic| simp [$simpLemmas,*]))
@@ -200,14 +256,5 @@ def runHammerCore (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser
         tryCatchRuntimeEx
           (absurd.assign duperProof)
           throwProofFitError
-      | Solver.cvc5 => throwError "evalHammer :: cvc5 support not yet implemented"
-
-@[tactic hammerCore]
-def evalHammerCore : Tactic
-| `(tactic| hammerCore%$stxRef [$simpLemmas,*] [$facts,*] {$configOptions,*}) => do
-  let configOptions ← parseConfigOptions configOptions
-  let (includeLCtx, facts) := removeHammerStar facts
-  runHammerCore stxRef simpLemmas facts includeLCtx configOptions
-| _ => throwUnsupportedSyntax
 
 end HammerCore

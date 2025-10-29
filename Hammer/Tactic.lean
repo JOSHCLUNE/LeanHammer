@@ -13,33 +13,33 @@ syntax (name := hammer) "hammer" (ppSpace "[" (term),* "]")? (ppSpace "{"Hammer.
 
 def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
   (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit := withMainContext do
-  let aesopAutoPriority := configOptions.aesopAutoPriority
+  let aesopDuperPriority := configOptions.aesopDuperPriority
   let aesopPremisePriority := configOptions.aesopPremisePriority
-  let autoPremises := userInputTerms ++ premises.take configOptions.autoPremises
+  let duperPremises := userInputTerms ++ premises.take configOptions.duperPremises
   let aesopPremises := userInputTerms ++ premises.take configOptions.aesopPremises
   let mut addIdentStxs : TSyntaxArray `Aesop.tactic_clause := #[]
   for p in aesopPremises do
     -- **TODO** Add support for terms that aren't just names of premises
     let pFeature ← `(Aesop.feature| $(mkIdent p.raw.getId):ident)
     addIdentStxs := addIdentStxs.push (← `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit aesopPremisePriority):num % $pFeature:Aesop.feature)))
-  if configOptions.disableAesop && configOptions.disableAuto then
-    throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
+  if configOptions.disableAesop && configOptions.disableDuper then
+    throwError "Erroneous invocation of hammer: The aesop and duper options cannot both be disabled"
   else if configOptions.disableAesop then
-    runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
-  else if configOptions.disableAuto then
+    HammerCore.runDuper stxRef simpLemmas duperPremises includeLCtx configOptions
+  else if configOptions.disableDuper then
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
       Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
   else
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
-      let formulas ← withDuperOptions $ collectAssumptions autoPremises false #[]
+      let formulas ← withDuperOptions $ collectAssumptions duperPremises false #[]
       let formulas : List (Expr × Expr × Array Name × Bool × String) := -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
         formulas.filterMap (fun (fact, proof, params, isFromGoal, stxOpt) => stxOpt.map (fun stx => (fact, proof, params, isFromGoal, stx.raw.getId.toString)))
-      let ruleTacType := mkConst `Aesop.SingleRuleTac
-      let ruleTacVal ← mkAppM `HammerCore.hammerCoreSingleRuleTac #[q($formulas), q($includeLCtx), q($configOptions)]
+      let ruleTacType := mkConst ``Aesop.SingleRuleTac
+      let ruleTacVal ← mkAppM ``HammerCore.duperSingleRuleTac #[q($formulas), q($includeLCtx), q($configOptions)]
       let ruleTacDecl := mkDefinitionValEx `instantiatedHammerCoreRuleTac [] ruleTacType ruleTacVal ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedHammerCoreRuleTac]
       addAndCompile $ Declaration.defnDecl ruleTacDecl
       let ruleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedHammerCoreRuleTac)))
-      Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% tactic $ruleTacStx)))
+      Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopDuperPriority):num% tactic $ruleTacStx)))
 
 def evalHammerWithArgs : Tactic
 | `(tactic| hammer%$stxRef [$userInputTerms,*] {$configOptions,*}) => withoutModifyingEnv do
@@ -49,9 +49,9 @@ def evalHammerWithArgs : Tactic
   let userInputTerms : Array Term := userInputTerms
   let configOptions ← parseConfigOptions configOptions
   let maxSuggestions :=
-    if configOptions.disableAesop then configOptions.autoPremises
-    else if configOptions.disableAuto then configOptions.aesopPremises
-    else max configOptions.autoPremises configOptions.aesopPremises
+    if configOptions.disableAesop then configOptions.duperPremises
+    else if configOptions.disableDuper then configOptions.aesopPremises
+    else max configOptions.duperPremises configOptions.aesopPremises
   let premiseSelectionConfig : PremiseSelection.Config := {
     maxSuggestions := maxSuggestions + userInputTerms.size, -- Add `userInputTerms.size` to ensure there are `maxSuggestions` non-duplicate premises
     caller := `hammer

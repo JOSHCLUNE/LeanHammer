@@ -1,4 +1,4 @@
-import HammerCore.Tactic
+import HammerCore.Duper
 import Aesop
 
 open Lean Meta Parser Elab Tactic Auto Duper Syntax Aesop
@@ -12,7 +12,7 @@ namespace HammerCore
     **TODO** Currently, Zipperposition's unsat core is not used to minimize the set of formulas from the local context that are sent to Duper, but in
     the future, this behavior should be added as an option (it should theoretically improve the strength of some suggested Duper invocations at the cost
     of increasing the size of all suggested Duper invocations). -/
-def hammerCoreSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool × String))
+def duperSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool × String))
   (includeLCtx : Bool) (configOptions : ConfigurationOptions) : SingleRuleTac := λ input => do
   let preState ← saveState
   input.goal.withContext do
@@ -79,7 +79,6 @@ def hammerCoreSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool
                 throwTranslationError e
             )
         match configOptions.solver with
-        | Solver.cvc5 => throwError "evalHammer :: cvc5 support not yet implemented"
         | Solver.zipperposition_exe | Solver.zipperposition =>
           let unsatCoreDerivLeafStrings := solverHints.1
           trace[hammer.debug] "unsatCoreDerivLeafStrings: {unsatCoreDerivLeafStrings}"
