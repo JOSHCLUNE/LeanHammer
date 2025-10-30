@@ -215,9 +215,9 @@ def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM Confi
       let _ ← Auto.Solver.TPTP.getZipperpositionExePath -- This throws an error if the executable can't be found
     catch _ =>
       if configOptions.disableAesop then
-        throwError "The bundled zipperposition executable could not be found. To retrieve it, run `lake update LeanHammer`."
+        throwError "The bundled zipperposition executable could not be found. To retrieve it, run `lake update Hammer`."
       else
-        logWarning "The bundled zipperposition executable could not be found. To retrieve it, run `lake update LeanHammer`. Continuing with auto disabled..."
+        logWarning "The bundled zipperposition executable could not be found. To retrieve it, run `lake update Hammer`. Continuing with auto disabled..."
         return {configOptions with disableAuto := true}
   return configOptions
 

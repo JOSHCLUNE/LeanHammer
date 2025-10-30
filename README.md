@@ -47,7 +47,7 @@ The first time you `import Hammer`, Lake has to build the hammer component, whic
 
 If you use a version of Mathlib that differs from the most recent one, the premise selection server may have to calculate embeddings for the theorems it doesn't have. This can take a little while, but the server can use cached embeddings after that. You can test the hammer without premise selection by replacing `hammer` by `hammer {aesopPremises := 0, autoPremises := 0}` in the example above.
 
-You are free to try to use a version of the hammer with a nearby version of Lean and Mathlib, but there are no guarantees it will work. As explained below, the hammer has several dependencies, and they break often as Lean changes. If you add the Hammer to an existing project and don't use `lake update`, you should use `lake update LeanHammer` to fetch the hammer and Zipperposition. You should also put the `Hammer` dependency before the `mathlib` dependency in `lakefile.toml` or `lakefil.lean`: Mathlib and LeanHammer share a dependency on `batteries`, and unless you favor Mathlib's version, you will end up recompiling Mathlib.
+You are free to try to use a version of the hammer with a nearby version of Lean and Mathlib, but there are no guarantees it will work. As explained below, the hammer has several dependencies, and they break often as Lean changes. If you add the Hammer to an existing project and don't use `lake update`, you should use `lake update Hammer` to fetch the hammer and Zipperposition. You should also put the `Hammer` dependency before the `mathlib` dependency in `lakefile.toml` or `lakefil.lean`: Mathlib and LeanHammer share a dependency on `batteries`, and unless you favor Mathlib's version, you will end up recompiling Mathlib.
 
 ### Note for Macs
 
