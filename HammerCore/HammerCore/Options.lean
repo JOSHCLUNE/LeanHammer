@@ -11,7 +11,7 @@ declare_syntax_cat Hammer.solverOption (behavior := symbol)
 declare_syntax_cat Hammer.preprocessing (behavior := symbol)
 -- An option to specify other configuration options for `hammer`
 declare_syntax_cat Hammer.configOption (behavior := symbol)
--- An option to indicate a boolean value (used for toggling `disableAesop` and `disableAuto`)
+-- An option to indicate a boolean value (used for toggling `disableAesop` and `disableDuper`)
 declare_syntax_cat Hammer.bool_lit (behavior := symbol)
 syntax "true" : Hammer.bool_lit
 syntax "false" : Hammer.bool_lit
@@ -243,9 +243,9 @@ def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM Confi
       let _ ← Auto.Solver.TPTP.getZipperpositionExePath -- This throws an error if the executable can't be found
     catch _ =>
       if configOptions.disableAesop then
-        throwError "The bundled zipperposition executable could not be found. To retrieve it, run `lake update`."
+        throwError "The bundled zipperposition executable could not be found. To retrieve it, run `lake update Hammer`."
       else
-        logWarning "The bundled zipperposition executable could not be found. To retrieve it, run `lake update`. Continuing with auto disabled..."
+        logWarning "The bundled zipperposition executable could not be found. To retrieve it, run `lake update Hammer`. Continuing with auto disabled..."
         return {configOptions with disableDuper := true}
   return configOptions
 
@@ -275,7 +275,7 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
       else throwError "Erroneous invocation of hammer: The preprocessing option has been specified multiple times"
     | `(Hammer.configOption| disableDuper := $disableDuperBoolLit:Hammer.bool_lit) =>
       if disableDuperOpt.isNone then disableDuperOpt := some $ ← elabBoolLit disableDuperBoolLit
-      else throwError "Erroneous invocation of hammer: The disableAuto option has been specified multiple times"
+      else throwError "Erroneous invocation of hammer: The disableDuper option has been specified multiple times"
     | `(Hammer.configOption| disableAesop := $disableAesopBoolLit:Hammer.bool_lit) =>
       if disableAesopOpt.isNone then disableAesopOpt := some $ ← elabBoolLit disableAesopBoolLit
       else throwError "Erroneous invocation of hammer: The disableAesop option has been specified multiple times"

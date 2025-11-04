@@ -2,36 +2,36 @@
 
 LeanHammer is an automated reasoning tool for Lean that brings together multiple proof search and reconstruction techniques and combines them into one tool. The `hammer` tactic provided by LeanHammer uses a variety of techniques to search for a proof of the current goal, then constructs a suggestion for a tactic script which can replace the `hammer` invocation.
 
-LeanHammer is in an early stage of its development and is therefore subject to breaking changes. There are currently versions of the hammer that are compatible with the stable versions of Lean from `v4.20.0` through `v4.23.0` (and the corresponding versions of Mathlib).
+LeanHammer is in an early stage of its development and is therefore subject to breaking changes. There are currently versions of the hammer that are compatible with the stable versions of Lean from `v4.20.0` through `v4.24.0` (and the corresponding versions of Mathlib).
 
 Pull requests and issues are welcome.
 
 ## Adding LeanHammer to Your Project
 
-To add LeanHammer for v4.23.0 to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
+To add LeanHammer for v4.24.0 to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
 
 ```toml
 [[require]]
 name = "Hammer"
 git = "https://github.com/JOSHCLUNE/LeanHammer"
-rev = "v4.23.0"
+rev = "v4.24.0"
 
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.23.0"
+rev = "v4.24.0"
 ```
 The file `lean-toolchain` should contain the following:
 ```
-leanprover/lean4:v4.23.0
+leanprover/lean4:v4.24.0
 ```
 
 If you have a project with a `lakefile.lean` instead of `lakefile.toml`, you can use this instead:
 
 ```lean
-require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "v4.23.0"
+require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "v4.24.0"
 
-require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.23.0"
+require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.24.0"
 ```
 
 Then use `lake update` to fetch the hammer and the corresponding versions of Lean and Mathlib. This also retrieves the Zipperposition executable that comes with LeanHammer. (This executable will be stored in the existing project's `.lake` directory.) The following example should then compile without any warnings or errors:
@@ -47,7 +47,7 @@ The first time you `import Hammer`, Lake has to build the hammer component, whic
 
 If you use a version of Mathlib that differs from the most recent one, the premise selection server may have to calculate embeddings for the theorems it doesn't have. This can take a little while, but the server can use cached embeddings after that. You can test the hammer without premise selection by replacing `hammer` by `hammer {aesopPremises := 0, duperPremises := 0}` in the example above.
 
-You are free to try to use a version of the hammer with a nearby version of Lean and Mathlib, but there are no guarantees it will work. As explained below, the hammer has several dependencies, and they break often as Lean changes. If you add the Hammer to an existing project and don't use `lake update`, you should use `lake update hammer` to fetch the hammer and Zipperposition. You should also put the `Hammer` dependency before the `mathlib` dependency in `lakefile.toml` or `lakefil.lean`: Mathlib and LeanHammer share a dependency on `batteries`, and unless you favor Mathlib's version, you will end up recompiling Mathlib.
+You are free to try to use a version of the hammer with a nearby version of Lean and Mathlib, but there are no guarantees it will work. As explained below, the hammer has several dependencies, and they break often as Lean changes. If you add the Hammer to an existing project and don't use `lake update`, you should use `lake update Hammer` to fetch the hammer and Zipperposition. You should also put the `Hammer` dependency before the `mathlib` dependency in `lakefile.toml` or `lakefil.lean`: Mathlib and LeanHammer share a dependency on `batteries`, and unless you favor Mathlib's version, you will end up recompiling Mathlib.
 
 ### Note for Macs
 
