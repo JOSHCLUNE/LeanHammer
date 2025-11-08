@@ -211,7 +211,7 @@ syntax (&"aesopPremises" " := " numLit) : Hammer.configOption -- The number of p
 syntax (&"smtPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to lean-smt (default: 16)
 syntax (&"aesopPremisePriority" " := " numLit) : Hammer.configOption -- The priority of premises sent to `aesop` (default: 20)
 syntax (&"aesopDuperPriority" " := " numLit) : Hammer.configOption -- The priority of calls to the auto/zipperposition/duper pipeline within `aesop` (default: 10)
-syntax (&"leanSmtPriority" " := " numLit) : Hammer.configOption -- The priority of calls to lean-smt (default: 10)
+syntax (&"aesopSmtPriority" " := " numLit) : Hammer.configOption -- The priority of calls to lean-smt (default: 10)
 
 structure ConfigurationOptions where
   solver : Solver
@@ -222,7 +222,7 @@ structure ConfigurationOptions where
   disableSmt : Bool
   aesopPremisePriority : Nat
   aesopDuperPriority : Nat
-  smtPriority : Nat
+  aesopSmtPriority : Nat
   duperPremises : Nat -- The number of premises sent to the auto/zipperposition/duper pipeline (default: 16)
   aesopPremises : Nat -- The number of premises sent to `aesop` (default: 32)
   smtPremises : Nat -- The number of premises sent to lean-smt (default: 16)
@@ -261,7 +261,7 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   let mut smtPremisesOpt := none
   let mut aesopPremisePriorityOpt := none
   let mut aesopDuperPriorityOpt := none
-  let mut smtPriorityOpt := none
+  let mut aesopSmtPriorityOpt := none
   for configOptionStx in configOptionsStx do
     match configOptionStx with
     | `(Hammer.configOption| solver := $solverName:Hammer.solverOption) =>
@@ -297,9 +297,9 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| aesopDuperPriority := $userAesopDuperPriority:num) =>
       if aesopDuperPriorityOpt.isNone then aesopDuperPriorityOpt := some (TSyntax.getNat userAesopDuperPriority)
       else throwError "Erroneous invocation of hammer: The aesopAutoPriority option has been specified multiple times"
-    | `(Hammer.configOption| leanSmtPriority := $userSmtPriority:num) =>
-      if smtPriorityOpt.isNone then smtPriorityOpt := some (TSyntax.getNat userSmtPriority)
-      else throwError "Erroneous invocation of hammer: The leanSmtPriority option has been specified multiple times"
+    | `(Hammer.configOption| aesopSmtPriority := $userSmtPriority:num) =>
+      if aesopSmtPriorityOpt.isNone then aesopSmtPriorityOpt := some (TSyntax.getNat userSmtPriority)
+      else throwError "Erroneous invocation of hammer: The aesopSmtPriority option has been specified multiple times"
     | _ => throwUnsupportedSyntax
   -- Set default values for options that were not specified
   let solver ← -- **TODO** Come up with a better name for the `solver` option, since it's exclusively used for the Lean-auto/Zipperposition/Duper pipeline
@@ -348,14 +348,14 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match aesopDuperPriorityOpt with
     | none => getAesopDuperPriorityDefaultM
     | some aesopDuperPriority => pure aesopDuperPriority
-  let smtPriority ←
-    match smtPriorityOpt with
+  let aesopSmtPriority ←
+    match aesopSmtPriorityOpt with
     | none => getSmtPriorityDefaultM
     | some smtPriority => pure smtPriority
   let configOptions :=
     {solver := solver, solverTimeout := solverTimeout, preprocessing := preprocessing, disableDuper := disableDuper, disableAesop := disableAesop,
      disableSmt := disableSmt, duperPremises := duperPremises, aesopPremises := aesopPremises, smtPremises := smtPremises, aesopPremisePriority := aesopPremisePriority,
-     aesopDuperPriority := aesopDuperPriority, smtPriority := smtPriority}
+     aesopDuperPriority := aesopDuperPriority, aesopSmtPriority := aesopSmtPriority}
   let configOptions ← validateConfigOptions configOptions
   return configOptions
 

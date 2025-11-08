@@ -1,7 +1,9 @@
 import HammerCore.Duper
 import Aesop
+import Smt
+import Qq
 
-open Lean Meta Parser Elab Tactic Auto Duper Syntax Aesop
+open Lean Meta Parser Elab Tactic Auto Duper Syntax Aesop Qq
 
 namespace HammerCore
 
@@ -109,4 +111,60 @@ def duperSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool × S
           let postGoals ← postGoals.mapM (mvarIdToSubgoal input.goal ·)
           return (postGoals, some #[step], some ⟨1.0⟩)
 
+-- The following code was written by Tomaz Mascarenhas. It is scheduled to be added to lean-smt, and once it is, it can be removed from here.
+namespace Smt
+
+-- The type and the corresponding syntax
+abbrev Premises := List (Expr × Syntax)
+
+def cast_stx {m : Type → Type} [Monad m] (stx : Syntax) : m (TSyntax `term) :=
+  match stx with
+  | `($t) => return t
+
+def createArrow (es : List Expr) (e : Expr) : Expr :=
+  match es with
+  | [] => e
+  | hd :: tl =>
+    let r : Q(Prop) := createArrow tl e
+    let hd : Q(Prop) := hd
+    q($hd -> $r)
+
+def smtSingleRuleTac (ps : Premises) (includeLCtx : Bool) : SingleRuleTac := fun input => do
+  let preState ← saveState
+  input.goal.withContext do
+    let g ← input.goal.getType
+    let types := ps.map (fun p => p.1)
+    let arrow := createArrow types g
+    let mv ← mkFreshExprMVar arrow
+    let (hs, mv') ← mv.mvarId!.introN ps.length
+    let res ← Smt.smt default mv' (hs.map (fun fv => .fvar fv))
+    let unsat_core ←
+      match res with
+      | .unsat mvs uc => pure uc
+      | _ => throwError "[Smt.smt]: Got SAT from solver"
+    let names := unsat_core.map (fun e => let idx := hs.findIdx (fun z => .fvar z == e); ps[idx]!.2)
+    let namesT ← names.mapM cast_stx
+    let idents ← namesT.mapM (fun i => `(Smt.Tactic.smtHintElem| $i:term))
+    let stx ←
+      if includeLCtx && !unsat_core.isEmpty then
+        `(tactic| smt [*, $(idents),*])
+      else if includeLCtx && unsat_core.isEmpty then
+        `(tactic| smt [*])
+      else if !includeLCtx && !unsat_core.isEmpty then
+        `(tactic| smt [$(idents),*])
+      else -- if !includeLCtx && unsat_core.isEmpty
+        `(tactic| smt)
+    let tac := withoutRecover $ evalTactic stx
+    let postGoals := (← Elab.Tactic.run input.goal tac |>.run').toArray
+    let postState ← saveState
+    let tacticBuilder : MetaM Script.Tactic := pure $ .unstructured ⟨stx⟩
+    let step : Script.LazyStep := {
+      preGoal := input.goal
+      tacticBuilders := #[tacticBuilder]
+      preState, postState, postGoals
+    }
+    let postGoals ← postGoals.mapM (mvarIdToSubgoal input.goal ·)
+    return (postGoals, some #[step], some ⟨1.0⟩)
+
+end Smt
 end HammerCore

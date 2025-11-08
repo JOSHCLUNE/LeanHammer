@@ -14,41 +14,56 @@ syntax (name := hammer) "hammer" (ppSpace "[" (term),* "]")? (ppSpace "{"Hammer.
 def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
   (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit := withMainContext do
   let aesopDuperPriority := configOptions.aesopDuperPriority
+  let aesopSmtPriority := configOptions.aesopSmtPriority
   let aesopPremisePriority := configOptions.aesopPremisePriority
   let duperPremises := userInputTerms ++ premises.take configOptions.duperPremises
+  let smtPremises := userInputTerms ++ premises.take configOptions.smtPremises
   let aesopPremises := userInputTerms ++ premises.take configOptions.aesopPremises
-  let mut addIdentStxs : TSyntaxArray `Aesop.tactic_clause := #[]
-  for p in aesopPremises do
-    -- **TODO** Add support for terms that aren't just names of premises
-    let pFeature ← `(Aesop.feature| $(mkIdent p.raw.getId):ident)
-    addIdentStxs := addIdentStxs.push (← `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit aesopPremisePriority):num % $pFeature:Aesop.feature)))
   match configOptions.disableAesop, configOptions.disableDuper, configOptions.disableSmt with
   | true, true, true =>
     throwError "Erroneous invocation of hammer: At least one of the aesop, duper, and smt options must be enabled"
   | true, true, false =>
-    HammerCore.smtPipeline stxRef simpLemmas premises includeLCtx configOptions
+    HammerCore.smtPipeline stxRef simpLemmas smtPremises includeLCtx configOptions
   | true, false, true =>
     HammerCore.runDuper stxRef simpLemmas duperPremises includeLCtx configOptions
   | true, false, false =>
     throwError "Parallel execution of duper and smt is not yet implemented"
-  | false, true, true =>
+  | false, _, _ =>
     withOptions (fun o => o.set `aesop.warn.applyIff false) do
-      Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
-  | false, true, false =>
-    throwError "Lean-smt/Aesop integration not yet implemented"
-  | false, false, true =>
-    withOptions (fun o => o.set `aesop.warn.applyIff false) do
-      let formulas ← withDuperOptions $ collectAssumptions duperPremises false #[]
-      let formulas : List (Expr × Expr × Array Name × Bool × String) := -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
-        formulas.filterMap (fun (fact, proof, params, isFromGoal, stxOpt) => stxOpt.map (fun stx => (fact, proof, params, isFromGoal, stx.raw.getId.toString)))
-      let ruleTacType := mkConst ``Aesop.SingleRuleTac
-      let ruleTacVal ← mkAppM ``HammerCore.duperSingleRuleTac #[q($formulas), q($includeLCtx), q($configOptions)]
-      let ruleTacDecl := mkDefinitionValEx `instantiatedHammerCoreRuleTac [] ruleTacType ruleTacVal ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedHammerCoreRuleTac]
-      addAndCompile $ Declaration.defnDecl ruleTacDecl
-      let ruleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedHammerCoreRuleTac)))
-      Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopDuperPriority):num% tactic $ruleTacStx)))
-  | false, false, false =>
-    throwError "Lean-smt/Aesop integration not yet implemented"
+      -- Build `addIdentStxs`
+      let mut addIdentStxs : TSyntaxArray `Aesop.tactic_clause := #[]
+      for p in aesopPremises do -- **TODO** Add support for terms that aren't just names of premises
+        let pFeature ← `(Aesop.feature| $(mkIdent p.raw.getId):ident)
+        addIdentStxs := addIdentStxs.push (← `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit aesopPremisePriority):num % $pFeature:Aesop.feature)))
+
+      -- Build `smtRuleTacStx`
+      let smtHints ← smtPremises.mapM (fun n => `(Smt.Tactic.smtHintElem| $n:term))
+      let (_, elabedSmtHints) ← Smt.Tactic.elabHints (← `(Smt.Tactic.smtHints| [$(smtHints),*]))
+      let smtHintTypes ← elabedSmtHints.mapM (fun h => Meta.inferType h)
+      let smtHintTypesAndStx : List (Expr × Syntax) := List.zip smtHintTypes.toList $ smtPremises.toList.map (fun t => t.raw)
+      let smtRuleTacVal ← mkAppM ``HammerCore.Smt.smtSingleRuleTac #[q($smtHintTypesAndStx), q(false)]
+      let smtRuleTacType := mkConst `Aesop.SingleRuleTac
+      let smtRuleTacDecl := mkDefinitionValEx `instantiatedSmtCoreRuleTac [] smtRuleTacType smtRuleTacVal ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedSmtCoreRuleTac]
+      addAndCompile $ Declaration.defnDecl smtRuleTacDecl
+      let smtRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedSmtCoreRuleTac)))
+
+      -- Build `duperRuleTacStx`
+      let duperFormulas ← withDuperOptions $ collectAssumptions duperPremises false #[]
+      let duperFormulas : List (Expr × Expr × Array Name × Bool × String) := -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
+        duperFormulas.filterMap (fun (fact, proof, params, isFromGoal, stxOpt) => stxOpt.map (fun stx => (fact, proof, params, isFromGoal, stx.raw.getId.toString)))
+      let duperRuleTacType := mkConst ``Aesop.SingleRuleTac
+      let duperRuleTacVal ← mkAppM ``HammerCore.duperSingleRuleTac #[q($duperFormulas), q($includeLCtx), q($configOptions)]
+      let duperRuleTacDecl := mkDefinitionValEx `instantiatedDuperCoreRuleTac [] duperRuleTacType duperRuleTacVal ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedDuperCoreRuleTac]
+      addAndCompile $ Declaration.defnDecl duperRuleTacDecl
+      let duperRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedDuperCoreRuleTac)))
+
+      -- Build `aesop?` call depending on `configOptions.disableDuper` and `configOptions.disableSmt`
+      match configOptions.disableDuper, configOptions.disableSmt with
+      | true, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
+      | true, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopSmtPriority):num% tactic $smtRuleTacStx)))
+      | false, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopDuperPriority):num% tactic $duperRuleTacStx)))
+      | false, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopSmtPriority):num% tactic $smtRuleTacStx)
+                                                                           (add unsafe $(Syntax.mkNatLit aesopDuperPriority):num% tactic $duperRuleTacStx)))
 
 def evalHammerWithArgs : Tactic
 | `(tactic| hammer%$stxRef [$userInputTerms,*] {$configOptions,*}) => withoutModifyingEnv do
