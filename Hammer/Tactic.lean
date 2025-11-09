@@ -86,6 +86,11 @@ def evalHammerWithArgs : Tactic
     maxSuggestions := maxSuggestions + userInputTerms.size, -- Add `userInputTerms.size` to ensure there are `maxSuggestions` non-duplicate premises
     caller := `hammer
   }
+  -- Extend moduleDenyList to include modules from LeanHammer or its dependencies
+  let moduleDenyList := moduleDenyListExt.getState (← getEnv)
+  setEnv $ moduleDenyListExt.setState (← getEnv) (["Auto", "Duper", "PremiseSelection", "Smt", "cvc5", "Aesop", "HammerCore", "Hammer"] ++ moduleDenyList)
+  let unindexedPremises ← PremiseSelection.Cloud.getUnindexedPremises
+  trace[hammer.premises] "unindexedPremises: {unindexedPremises.map Premise.name}"
   -- Get the registered premise selector for premise selection.
   -- If none registered, then use the cloud premise selector by default.
   let selector := premiseSelectorExt.getState (← getEnv)
