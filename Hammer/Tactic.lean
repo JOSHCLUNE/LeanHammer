@@ -38,6 +38,8 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
 
       -- Build `smtRuleTacStx`
       let smtHints ← smtPremises.mapM (fun n => `(Smt.Tactic.smtHintElem| $n:term))
+      -- **TODO** `Smt.Tactic.elabHints` can yield the error: "failed to elaborate eliminator, expected type is not available". Lean-smt's internal
+      -- filter does not resolve this issue, then I should wrap the next line in a try-catch statement
       let (_, elabedSmtHints) ← Smt.Tactic.elabHints (← `(Smt.Tactic.smtHints| [$(smtHints),*]))
       let smtHintTypes ← elabedSmtHints.mapM (fun h => Meta.inferType h)
       let smtHintTypesAndStx : List (Expr × Syntax) := List.zip smtHintTypes.toList $ smtPremises.toList.map (fun t => t.raw)
