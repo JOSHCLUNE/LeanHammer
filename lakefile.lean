@@ -7,7 +7,10 @@ require «Qq» from git "https://github.com/leanprover-community/quote4.git" @ "
 
 require «HammerCore» from "./HammerCore"
 
-package Hammer
+package Hammer {
+  precompileModules := true
+  preferReleaseBuild := true
+}
 
 @[default_target]
 lean_lib Hammer
