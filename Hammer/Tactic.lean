@@ -3,13 +3,15 @@ import PremiseSelection
 import Aesop
 import Qq
 
-open Lean Meta Elab Tactic HammerCore Syntax PremiseSelection Duper Aesop Qq
+open Lean Meta Elab Tactic HammerCore Syntax LibrarySuggestions Duper Aesop Qq
 
 initialize Lean.registerTraceClass `hammer.premises
 
 namespace Hammer
 
 syntax (name := hammer) "hammer" (ppSpace "[" (term),* "]")? (ppSpace "{"Hammer.configOption,*,?"}")? : tactic
+
+set_library_suggestions open Lean.LibrarySuggestions in Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
 
 def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
   (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit := withMainContext do
@@ -52,18 +54,26 @@ def evalHammerWithArgs : Tactic
     if configOptions.disableAesop then configOptions.autoPremises
     else if configOptions.disableAuto then configOptions.aesopPremises
     else max configOptions.autoPremises configOptions.aesopPremises
-  let premiseSelectionConfig : PremiseSelection.Config := {
-    maxSuggestions? := maxSuggestions + userInputTerms.size, -- Add `userInputTerms.size` to ensure there are `maxSuggestions` non-duplicate premises
-    caller := `hammer
+  let librarySuggestionsConfig : LibrarySuggestions.Config := {
+    maxSuggestions := maxSuggestions + userInputTerms.size, -- Add `userInputTerms.size` to ensure there are `maxSuggestions` non-duplicate premises
+    caller := "hammer"
   }
-  -- Get the registered premise selector for premise selection.
-  -- If none registered, then use the cloud premise selector by default.
-  let selector := premiseSelectorExt.getState (← getEnv)
-  let defaultSelector := Cloud.premiseSelector <|> mepoSelector (useRarity := false) (p := 0.6) (c := 0.9)
+  /- Get the registered premise selector for premise selection.
+
+     Currently, the registration mechanism for library suggestions is just global state, so the `set_library_suggestions` command on line 14 should override
+     the `set_library_suggestions` command in Lean.LibrarySuggestions.Default, but if a user invokes `set_library_suggestions` after importing Hammer, then
+     their command will override the command on line 14.
+
+     For now, this is fine because the current solution yields the desired behavior (`Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile`)
+     is the effective default that users can override with `set_library_suggestions`. However, a comment in Lean.LibrarySuggestions.Basic (line 392 of v4.26.0)
+     indicates that the registration mechanism is likely to change in the future, and if this occurs, I may need to adjust accordingly to preserve LeanHammer's
+     intended behavior. -/
+  let selector ← getSelector
+  let defaultSelector := Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
   let selector := selector.getD defaultSelector
   let premises ←
     if maxSuggestions == 0 then pure #[] -- If `maxSuggestions` is 0, then we don't need to waste time calling the premise selector
-    else selector goal premiseSelectionConfig
+    else selector goal librarySuggestionsConfig
   let premises ← premises.mapM (fun p => unresolveNameGlobal p.name)
   let premises ← premises.mapM (fun p => return (← `(term| $(mkIdent p))))
   trace[hammer.premises] "user input terms: {userInputTerms}"
