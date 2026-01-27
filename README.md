@@ -2,36 +2,38 @@
 
 LeanHammer is an automated reasoning tool for Lean that brings together multiple proof search and reconstruction techniques and combines them into one tool. The `hammer` tactic provided by LeanHammer uses a variety of techniques to search for a proof of the current goal, then constructs a suggestion for a tactic script which can replace the `hammer` invocation.
 
-LeanHammer is in an early stage of its development and is therefore subject to breaking changes. There are currently versions of the hammer that are compatible with the stable versions of Lean from `v4.20.0` through `v4.26.0` (and the corresponding versions of Mathlib).
+LeanHammer is in an early stage of its development and is therefore subject to breaking changes. There are currently versions of the hammer that are compatible with the stable versions of Lean from `v4.20.0` through `v4.27.0` (and the corresponding versions of Mathlib).
+
+***Note:** Although the LeanHammer repository has been updated to support `v4.27.0`, the LeanPremise server which LeanHammer uses for premise selection is still being updated from `v4.26.0` to `v4.27.0`. During the intermediate period while this update is occurring, premise selection may be slower and less accurate than usual. This note will be removed once the server has been fully updated to `v4.27.0`.*
 
 Pull requests and issues are welcome.
 
 ## Adding LeanHammer to Your Project
 
-To add LeanHammer for v4.26.0 to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
+To add LeanHammer for `v4.27.0` to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
 
 ```toml
 [[require]]
 name = "Hammer"
 git = "https://github.com/JOSHCLUNE/LeanHammer"
-rev = "v4.26.0"
+rev = "v4.27.0"
 
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.26.0"
+rev = "v4.27.0"
 ```
 The file `lean-toolchain` should contain the following:
 ```
-leanprover/lean4:v4.26.0
+leanprover/lean4:v4.27.0
 ```
 
 If you have a project with a `lakefile.lean` instead of `lakefile.toml`, you can use this instead:
 
 ```lean
-require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "v4.26.0"
+require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "v4.27.0"
 
-require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.26.0"
+require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.27.0"
 ```
 
 Then use `lake update` to fetch the hammer and the corresponding versions of Lean and Mathlib. This also retrieves the Zipperposition executable that comes with LeanHammer. (This executable will be stored in the existing project's `.lake` directory.) The following example should then compile without any warnings or errors:

@@ -6,12 +6,12 @@ defaultTargets = ["Hammer"]
 [[require]]
 name = "«premise-selection»"
 git = "https://github.com/hanwenzhu/premise-selection"
-rev = "v4.26.0"
+rev = "v4.27.0"
 
 [[require]]
 name = "Qq"
 git = "https://github.com/leanprover-community/quote4.git"
-rev = "v4.26.0"
+rev = "v4.27.0"
 
 [[require]]
 name = "HammerCore"
