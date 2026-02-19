@@ -1,9 +1,9 @@
 import Lake
 open Lake DSL
 
-require «aesop» from git "https://github.com/leanprover-community/aesop" @ "v4.27.0"
+require «aesop» from git "https://github.com/leanprover-community/aesop" @ "v4.28.0"
 
-require «Duper» from git "https://github.com/leanprover-community/duper.git" @ "v4.27.0"
+require «Duper» from git "https://github.com/leanprover-community/duper.git" @ "v4.28.0"
 
 package HammerCore {
   precompileModules := true
