@@ -1,5 +1,5 @@
-import HammerCore.DuperCore
-import HammerCore.Options
+import Hammer.DuperCore
+import Hammer.Options
 
 open Lean Meta Parser Elab Tactic Auto Duper Syntax
 
