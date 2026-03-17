@@ -1,4 +1,4 @@
-import HammerCore.Tactic
+import Hammer.Tactic
 import Aesop
 
 open Lean Meta Parser Elab Tactic Auto Duper Syntax Aesop
