@@ -14,8 +14,14 @@ git = "https://github.com/leanprover-community/quote4.git"
 rev = "v4.28.0"
 
 [[require]]
-name = "HammerCore"
-path = "./HammerCore"
+name = "«aesop»"
+git = "https://github.com/leanprover-community/aesop"
+rev = "v4.28.0"
+
+[[require]]
+name = "«Duper»"
+git = "https://github.com/leanprover-community/duper.git"
+rev = "v4.28.0"
 
 [[lean_lib]]
 name = "Hammer"

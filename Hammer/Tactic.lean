@@ -1,4 +1,4 @@
-import HammerCore
+import Hammer.HammerCore
 import PremiseSelection
 import Aesop
 import Qq
