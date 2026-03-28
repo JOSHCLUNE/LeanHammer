@@ -6,22 +6,22 @@ defaultTargets = ["Hammer"]
 [[require]]
 name = "«premise-selection»"
 git = "https://github.com/hanwenzhu/premise-selection"
-rev = "v4.28.0"
+rev = "v4.29.0"
 
 [[require]]
 name = "Qq"
 git = "https://github.com/leanprover-community/quote4.git"
-rev = "v4.28.0"
+rev = "v4.29.0"
 
 [[require]]
 name = "«aesop»"
 git = "https://github.com/leanprover-community/aesop"
-rev = "v4.28.0"
+rev = "v4.29.0"
 
 [[require]]
 name = "«Duper»"
 git = "https://github.com/leanprover-community/duper.git"
-rev = "v4.28.0"
+rev = "v4.29.0"
 
 [[lean_lib]]
 name = "Hammer"
