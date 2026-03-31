@@ -1,4 +1,5 @@
 import Hammer.HammerCore
+import Hammer.ParallelismUtil
 import PremiseSelection
 import Aesop
 import Qq
@@ -13,35 +14,56 @@ syntax (name := hammer) "hammer" (ppSpace "[" (term),* "]")? (ppSpace "{"Hammer.
 
 set_library_suggestions open Lean.LibrarySuggestions in Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
 
+/-- This functions produces one Aesop call where Aesop is given unsafe rules corresponding to individual
+    premise applications (these are determined by `addIdentStxs`) and one unsafe rule to call the
+    Lean-auto/Zipperposition/Duper pipeline (the premises passed into this pipeline is determined by `autoPremises`).
+    This function is entirely sequential, parallel calls to Aesop alone or Lean-auto alone are handled elsewhere. -/
+def runAesopAndAuto (autoPremises : Array Term) (addIdentStxs : TSyntaxArray `Aesop.tactic_clause)
+  (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit :=
+  withMainContext do withOptions (fun o => o.set `aesop.warn.applyIff false) do
+    let formulas ← withDuperOptions $ collectAssumptions autoPremises false #[]
+    let formulas : List (Expr × Expr × Array Name × Bool × String) :=
+      -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
+      formulas.filterMap (fun (fact, proof, params, isFromGoal, stxOpt) =>
+        stxOpt.map (fun stx => (fact, proof, params, isFromGoal, stx.raw.getId.toString)))
+    let ruleTacType := mkConst `Aesop.SingleRuleTac
+    let ruleTacVal ← mkAppM `HammerCore.hammerCoreSingleRuleTac #[q($formulas), q($includeLCtx), q($configOptions)]
+    let ruleTacDecl :=
+      mkDefinitionValEx `instantiatedHammerCoreRuleTac [] ruleTacType ruleTacVal
+        ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedHammerCoreRuleTac]
+    addAndCompile $ Declaration.defnDecl ruleTacDecl
+    let ruleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedHammerCoreRuleTac)))
+    Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit configOptions.aesopAutoPriority):num% tactic $ruleTacStx)))
+
 def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
-  (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit := withMainContext do
-  let aesopAutoPriority := configOptions.aesopAutoPriority
-  let aesopPremisePriority := configOptions.aesopPremisePriority
-  let autoPremises := userInputTerms ++ premises.take configOptions.autoPremises
-  let aesopPremises := userInputTerms ++ premises.take configOptions.aesopPremises
-  let mut addIdentStxs : TSyntaxArray `Aesop.tactic_clause := #[]
-  for p in aesopPremises do
-    -- **TODO** Add support for terms that aren't just names of premises
-    let pFeature ← `(Aesop.feature| $(mkIdent p.raw.getId):ident)
-    addIdentStxs := addIdentStxs.push (← `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit aesopPremisePriority):num % $pFeature:Aesop.feature)))
-  if configOptions.disableAesop && configOptions.disableAuto then
-    throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
-  else if configOptions.disableAesop then
-    runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
-  else if configOptions.disableAuto then
-    withOptions (fun o => o.set `aesop.warn.applyIff false) do
-      Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
-  else
-    withOptions (fun o => o.set `aesop.warn.applyIff false) do
-      let formulas ← withDuperOptions $ collectAssumptions autoPremises false #[]
-      let formulas : List (Expr × Expr × Array Name × Bool × String) := -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
-        formulas.filterMap (fun (fact, proof, params, isFromGoal, stxOpt) => stxOpt.map (fun stx => (fact, proof, params, isFromGoal, stx.raw.getId.toString)))
-      let ruleTacType := mkConst `Aesop.SingleRuleTac
-      let ruleTacVal ← mkAppM `HammerCore.hammerCoreSingleRuleTac #[q($formulas), q($includeLCtx), q($configOptions)]
-      let ruleTacDecl := mkDefinitionValEx `instantiatedHammerCoreRuleTac [] ruleTacType ruleTacVal ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedHammerCoreRuleTac]
-      addAndCompile $ Declaration.defnDecl ruleTacDecl
-      let ruleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedHammerCoreRuleTac)))
-      Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit aesopAutoPriority):num% tactic $ruleTacStx)))
+  (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit :=
+  withMainContext do
+    let autoPremises := userInputTerms ++ premises.take configOptions.autoPremises
+    let aesopPremises := userInputTerms ++ premises.take configOptions.aesopPremises
+    let mut addIdentStxs : TSyntaxArray `Aesop.tactic_clause := #[]
+    for p in aesopPremises do
+      -- **TODO** Add support for terms that aren't just names of premises
+      let pFeature ← `(Aesop.feature| $(mkIdent p.raw.getId):ident)
+      let tacticClause ← `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopPremisePriority):num % $pFeature:Aesop.feature))
+      addIdentStxs := addIdentStxs.push tacticClause
+    if configOptions.disableAesop && configOptions.disableAuto then
+      throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
+    else if configOptions.disableAesop then
+      runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
+    else if configOptions.disableAuto then
+      withOptions (fun o => o.set `aesop.warn.applyIff false) do
+        Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
+    else
+      withOptions (fun o => o.set `aesop.warn.applyIff false) do
+        -- **TODO** Tune parallelism options
+        if configOptions.parallelism then -- Run `Aesop+auto` setting in parallel with just Aesop and just Auto
+          tryAllTacsOnGoal stxRef [
+            runAesopAndAuto autoPremises addIdentStxs includeLCtx configOptions,
+            runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions,
+            Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
+          ]
+        else
+          runAesopAndAuto autoPremises addIdentStxs includeLCtx configOptions
 
 def evalHammerWithArgs : Tactic
 | `(tactic| hammer%$stxRef [$userInputTerms,*] {$configOptions,*}) => withoutModifyingEnv do
@@ -60,14 +82,14 @@ def evalHammerWithArgs : Tactic
   }
   /- Get the registered premise selector for premise selection.
 
-     Currently, the registration mechanism for library suggestions is just global state, so the `set_library_suggestions` command on line 14 should override
-     the `set_library_suggestions` command in Lean.LibrarySuggestions.Default, but if a user invokes `set_library_suggestions` after importing Hammer, then
-     their command will override the command on line 14.
+     Currently, the registration mechanism for library suggestions is just global state, so the `set_library_suggestions` command
+     on line 14 should override the `set_library_suggestions` command in Lean.LibrarySuggestions.Default, but if a user invokes
+     `set_library_suggestions` after importing Hammer, then their command will override the command on line 14.
 
-     For now, this is fine because the current solution yields the desired behavior (`Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile`)
-     is the effective default that users can override with `set_library_suggestions`. However, a comment in Lean.LibrarySuggestions.Basic (line 392 of v4.26.0)
-     indicates that the registration mechanism is likely to change in the future, and if this occurs, I may need to adjust accordingly to preserve LeanHammer's
-     intended behavior. -/
+     For now, this is fine because the current solution yields the desired behavior.
+     `Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile` is the effective default that users can override with
+     `set_library_suggestions`. However, a comment in Lean.LibrarySuggestions.Basic (line 392 of v4.26.0) indicates that the registration
+     mechanism is likely to change in the future, and if this occurs, I may need to adjust accordingly to preserve LeanHammer's intended behavior. -/
   let selector ← getSelector
   let defaultSelector := Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
   let selector := selector.getD defaultSelector

@@ -59,6 +59,11 @@ register_option hammer.aesopAutoPriorityDefault : Nat := {
   descr := "The default priority of calls to auto within aesop"
 }
 
+register_option hammer.parallelismDefault : Bool := {
+  defValue := false
+  descr := "The default value of the parallelism option"
+}
+
 namespace HammerCore
 
 def getHammerSolverDefault (opts : Options) : String := hammer.solverDefault.get opts
@@ -70,6 +75,7 @@ def getAutoPremisesDefault (opts : Options) : Nat := hammer.autoPremisesDefault.
 def getAesopPremisesDefault (opts : Options) : Nat := hammer.aesopPremisesDefault.get opts
 def getAesopPremisePriorityDefault (opts : Options) : Nat := hammer.aesopPremisePriorityDefault.get opts
 def getAesopAutoPriorityDefault (opts : Options) : Nat := hammer.aesopAutoPriorityDefault.get opts
+def getParallelismDefault (opts : Options) : Bool := hammer.parallelismDefault.get opts
 
 def getHammerSolverDefaultM : CoreM String := do
   let opts ← getOptions
@@ -106,6 +112,10 @@ def getAesopPremisePriorityDefaultM : CoreM Nat := do
 def getAesopAutoPriorityDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getAesopAutoPriorityDefault opts
+
+def getParallelismDefaultM : CoreM Bool := do
+  let opts ← getOptions
+  return getParallelismDefault opts
 
 syntax "zipperposition_exe" : Hammer.solverOption
 syntax "zipperposition" : Hammer.solverOption
@@ -181,6 +191,7 @@ syntax (&"autoPremises" " := " numLit) : Hammer.configOption -- The number of pr
 syntax (&"aesopPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `aesop` (default: 32)
 syntax (&"aesopPremisePriority" " := " numLit) : Hammer.configOption -- The priority of premises sent to `aesop` (default: 20)
 syntax (&"aesopAutoPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `auto` within `aesop` (default: 10)
+syntax (&"parallelism" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to use parallelism (default: true)
 
 structure ConfigurationOptions where
   solver : Solver
@@ -192,6 +203,7 @@ structure ConfigurationOptions where
   aesopAutoPriority : Nat
   autoPremises : Nat -- The number of premises sent to `auto` (default: 16)
   aesopPremises : Nat -- The number of premises sent to `aesop` (default: 32)
+  parallelism : Bool -- Whether to use parallelism (default: true)
 deriving ToExpr
 
 syntax hammerStar := "*"
@@ -231,6 +243,7 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   let mut aesopPremisesOpt := none
   let mut aesopPremisePriorityOpt := none
   let mut aesopAutoPriorityOpt := none
+  let mut parallelismOpt := none
   for configOptionStx in configOptionsStx do
     match configOptionStx with
     | `(Hammer.configOption| solver := $solverName:Hammer.solverOption) =>
@@ -260,6 +273,9 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| aesopAutoPriority := $userAesopAutoPriority:num) =>
       if aesopAutoPriorityOpt.isNone then aesopAutoPriorityOpt := some (TSyntax.getNat userAesopAutoPriority)
       else throwError "Erroneous invocation of hammer: The aesopAutoPriority option has been specified multiple times"
+    | `(Hammer.configOption| parallelism := $parallelismBoolLit:Hammer.bool_lit) =>
+      if parallelismOpt.isNone then parallelismOpt := some $ ← elabBoolLit parallelismBoolLit
+      else throwError "Erroneous invocation of hammer: The parallelism option has been specified multiple times"
     | _ => throwUnsupportedSyntax
   -- Set default values for options that were not specified
   let solver ← -- **TODO** Will likely need to refactor/rethink `solver` option when incorporating lean-smt
@@ -300,9 +316,13 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match aesopAutoPriorityOpt with
     | none => getAesopAutoPriorityDefaultM
     | some aesopAutoPriority => pure aesopAutoPriority
+  let parallelism ←
+    match parallelismOpt with
+    | none => getParallelismDefaultM
+    | some parallelism => pure parallelism
   let configOptions :=
     {solver := solver, solverTimeout := solverTimeout, preprocessing := preprocessing, disableAuto := disableAuto, disableAesop := disableAesop, autoPremises := autoPremises,
-     aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority}
+     aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority, parallelism := parallelism}
   let configOptions ← validateConfigOptions configOptions
   return configOptions
 
