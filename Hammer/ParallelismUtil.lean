@@ -30,13 +30,12 @@ def wrapTactic {α : Type} (tactic : α → TacticM Unit) (cancelTk? : Option IO
         let preCount := (← Core.getMessageLog).reportedPlusUnreported.size
         let ngoals ← Term.withSynthesize (postpone := .no) do
           Tactic.run mvar.mvarId! (tactic x)
+        let tryThisDelta := coreMessageLogDelta preCount (← Core.getMessageLog)
         if ngoals.isEmpty then
           let result ← instantiateMVars mvar
-          if result.hasExprMVar then return (none, {})
-          else
-            let tryThisDelta := coreMessageLogDelta preCount (← Core.getMessageLog)
-            return (some result, tryThisDelta)
-        else return (none, {})
+          if result.hasExprMVar then return (none, tryThisDelta)
+          else return (some result, tryThisDelta)
+        else return (none, tryThisDelta)
     catch _ =>
       return (none, {})
   let metaCtx ← readThe Meta.Context
@@ -66,13 +65,21 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (tacs : Lis
   while h : 0 < remainingTasks.length do
     let (firstRes, otherTasks) ← IO.waitAny' remainingTasks h
     remainingTasks := otherTasks
+    /- **TODO** The current method of appending to Core's message log works, but particularly in cases where
+       Aesop returns a partial suggestion, it would be helpful to have the output be more organized (in particular,
+       I need to make it easier to see whether a suggestion includes `sorry`) -/
     match firstRes with
     | .ok (some res, fwdMsgs) =>
       g.assign res
       Core.setMessageLog ((← Core.getMessageLog) ++ fwdMsgs)
       if outputAllSuggestions then continue
       else IO.CancelToken.set cancelTk; break
-    | .ok (none, _) => continue -- Tactic failed but didn't yield an error
+    | .ok (none, fwdMsgs) => -- Tactic failed but didn't yield an error
+      if outputAllSuggestions then
+        Core.setMessageLog ((← Core.getMessageLog) ++ fwdMsgs)
+        continue
+      else
+        continue
     | .error _ => continue -- Tactic yielded an error
 
 end Hammer.Util
