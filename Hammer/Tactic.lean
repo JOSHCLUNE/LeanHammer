@@ -4,11 +4,11 @@ import PremiseSelection
 import Aesop
 import Qq
 
-open Lean Meta Elab Tactic HammerCore Syntax LibrarySuggestions Duper Aesop Qq
-
 initialize Lean.registerTraceClass `hammer.premises
 
 namespace Hammer
+
+open Lean Meta Elab Tactic HammerCore Syntax LibrarySuggestions Duper Aesop Qq Util
 
 syntax (name := hammer) "hammer" (ppSpace "[" (term),* "]")? (ppSpace "{"Hammer.configOption,*,?"}")? : tactic
 
@@ -57,7 +57,7 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       withOptions (fun o => o.set `aesop.warn.applyIff false) do
         -- **TODO** Tune parallelism options
         if configOptions.parallelism then -- Run `Aesop+auto` setting in parallel with just Aesop and just Auto
-          tryAllTacsOnGoal stxRef [
+          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions [
             runAesopAndAuto autoPremises addIdentStxs includeLCtx configOptions,
             runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions,
             Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))

@@ -64,6 +64,11 @@ register_option hammer.parallelismDefault : Bool := {
   descr := "The default value of the parallelism option"
 }
 
+register_option hammer.outputAllSuggestionsDefault : Bool := {
+  defValue := false
+  descr := "The default value of the outputAllSuggestions option"
+}
+
 namespace HammerCore
 
 def getHammerSolverDefault (opts : Options) : String := hammer.solverDefault.get opts
@@ -76,6 +81,7 @@ def getAesopPremisesDefault (opts : Options) : Nat := hammer.aesopPremisesDefaul
 def getAesopPremisePriorityDefault (opts : Options) : Nat := hammer.aesopPremisePriorityDefault.get opts
 def getAesopAutoPriorityDefault (opts : Options) : Nat := hammer.aesopAutoPriorityDefault.get opts
 def getParallelismDefault (opts : Options) : Bool := hammer.parallelismDefault.get opts
+def getOutputAllSuggestionsDefault (opts : Options) : Bool := hammer.outputAllSuggestionsDefault.get opts
 
 def getHammerSolverDefaultM : CoreM String := do
   let opts ← getOptions
@@ -116,6 +122,10 @@ def getAesopAutoPriorityDefaultM : CoreM Nat := do
 def getParallelismDefaultM : CoreM Bool := do
   let opts ← getOptions
   return getParallelismDefault opts
+
+def getOutputAllSuggestionsDefaultM : CoreM Bool := do
+  let opts ← getOptions
+  return getOutputAllSuggestionsDefault opts
 
 syntax "zipperposition_exe" : Hammer.solverOption
 syntax "zipperposition" : Hammer.solverOption
@@ -192,6 +202,7 @@ syntax (&"aesopPremises" " := " numLit) : Hammer.configOption -- The number of p
 syntax (&"aesopPremisePriority" " := " numLit) : Hammer.configOption -- The priority of premises sent to `aesop` (default: 20)
 syntax (&"aesopAutoPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `auto` within `aesop` (default: 10)
 syntax (&"parallelism" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to use parallelism (default: true)
+syntax (&"outputAllSuggestions" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to show the user all suggestions or just the first one (default: false)
 
 structure ConfigurationOptions where
   solver : Solver
@@ -204,6 +215,7 @@ structure ConfigurationOptions where
   autoPremises : Nat -- The number of premises sent to `auto` (default: 16)
   aesopPremises : Nat -- The number of premises sent to `aesop` (default: 32)
   parallelism : Bool -- Whether to use parallelism (default: true)
+  outputAllSuggestions : Bool -- Whether to show the user all suggestions or just the first one (default: false)
 deriving ToExpr
 
 syntax hammerStar := "*"
@@ -216,6 +228,8 @@ macro_rules | `(tactic| hammerCore [$simpLemmas,*] [$facts,*]) => `(tactic| hamm
 
 /-- Checks to ensure that the set of given `configOptions` is usable. -/
 def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM ConfigurationOptions := do
+  if !configOptions.parallelism && configOptions.outputAllSuggestions then
+    throwError "Erroneous invocation of hammer: The outputAllSuggestions option can only be used when parallelism is enabled"
   if configOptions.disableAesop && configOptions.disableAuto then
     throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
   if configOptions.disableAesop && configOptions.preprocessing == Preprocessing.aesop then
@@ -244,6 +258,7 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   let mut aesopPremisePriorityOpt := none
   let mut aesopAutoPriorityOpt := none
   let mut parallelismOpt := none
+  let mut outputAllSuggestionsOpt := none
   for configOptionStx in configOptionsStx do
     match configOptionStx with
     | `(Hammer.configOption| solver := $solverName:Hammer.solverOption) =>
@@ -276,6 +291,9 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| parallelism := $parallelismBoolLit:Hammer.bool_lit) =>
       if parallelismOpt.isNone then parallelismOpt := some $ ← elabBoolLit parallelismBoolLit
       else throwError "Erroneous invocation of hammer: The parallelism option has been specified multiple times"
+    | `(Hammer.configOption| outputAllSuggestions := $outputAllSuggestionsBoolLit:Hammer.bool_lit) =>
+      if outputAllSuggestionsOpt.isNone then outputAllSuggestionsOpt := some $ ← elabBoolLit outputAllSuggestionsBoolLit
+      else throwError "Erroneous invocation of hammer: The outputAllSuggestions option has been specified multiple times"
     | _ => throwUnsupportedSyntax
   -- Set default values for options that were not specified
   let solver ← -- **TODO** Will likely need to refactor/rethink `solver` option when incorporating lean-smt
@@ -320,9 +338,15 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match parallelismOpt with
     | none => getParallelismDefaultM
     | some parallelism => pure parallelism
-  let configOptions :=
-    {solver := solver, solverTimeout := solverTimeout, preprocessing := preprocessing, disableAuto := disableAuto, disableAesop := disableAesop, autoPremises := autoPremises,
-     aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority, parallelism := parallelism}
+  let outputAllSuggestions ←
+    match outputAllSuggestionsOpt with
+    | none => getOutputAllSuggestionsDefaultM
+    | some outputAllSuggestions => pure outputAllSuggestions
+  let configOptions := {
+    solver := solver, solverTimeout := solverTimeout, preprocessing := preprocessing, disableAuto := disableAuto,
+    disableAesop := disableAesop, autoPremises := autoPremises, aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority,
+    aesopAutoPriority := aesopAutoPriority, parallelism := parallelism, outputAllSuggestions := outputAllSuggestions
+  }
   let configOptions ← validateConfigOptions configOptions
   return configOptions
 
