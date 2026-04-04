@@ -62,6 +62,9 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (tacs : Lis
     let wrappedTac ← pure ((← wrapTactic (fun () => tac) cancelTk stxRef) ())
     tasks := tasks.push (← (BaseIO.asTask wrappedTac))
   let mut remainingTasks := tasks.toList
+  let mut foundCompleteProof := false
+  let mut completeSuggestions ← Core.getMessageLog
+  let mut incompleteSuggestions ← Core.getMessageLog
   while h : 0 < remainingTasks.length do
     let (firstRes, otherTasks) ← IO.waitAny' remainingTasks h
     remainingTasks := otherTasks
@@ -71,15 +74,17 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (tacs : Lis
     match firstRes with
     | .ok (some res, fwdMsgs) =>
       g.assign res
-      Core.setMessageLog ((← Core.getMessageLog) ++ fwdMsgs)
+      foundCompleteProof := true
+      completeSuggestions := completeSuggestions ++ fwdMsgs
       if outputAllSuggestions then continue
       else IO.CancelToken.set cancelTk; break
     | .ok (none, fwdMsgs) => -- Tactic failed but didn't yield an error
-      if outputAllSuggestions then
-        Core.setMessageLog ((← Core.getMessageLog) ++ fwdMsgs)
-        continue
-      else
-        continue
+      incompleteSuggestions := incompleteSuggestions ++ fwdMsgs
+      continue
     | .error _ => continue -- Tactic yielded an error
+  -- If any tactics returned with a complete success, only show the complete successes. Partial suggestions
+  -- containing `sorry` should only be shown if none of the attempted tactics could find a complete proof.
+  if foundCompleteProof then Core.setMessageLog completeSuggestions
+  else Core.setMessageLog incompleteSuggestions
 
 end Hammer.Util
