@@ -60,7 +60,8 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
           tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions [
             runAesopAndAuto autoPremises addIdentStxs includeLCtx configOptions,
             runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions,
-            Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
+            Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*)),
+            evalTactic (← `(tactic| grind?)) -- **TODO** `mkEMatchTheoremAndSuggest` can be used to filter `grind` input
           ]
         else
           runAesopAndAuto autoPremises addIdentStxs includeLCtx configOptions
