@@ -57,13 +57,44 @@ def coreMessageLogDelta (preCount : Nat) (post : MessageLog) : MessageLog :=
       i := i + 1
     return { reported := {}, unreported := u, loggedKinds := {} }
 
+/-- Inlines bodies of constants that appear in `e` but are absent from `env0` (typically auxiliary
+    definitions created by tactics such as `grind` or `omega` during an isolated elaboration run).
+    Must be executed while the current environment still contains those constants. -/
+partial def inlineFreshProofs (env0 : Environment) (e : Expr) : MetaM Expr := do
+  let rec inline (e : Expr) : MetaM Expr := do
+    match e with
+    | .bvar _ | .fvar _ | .mvar _ | .sort _ | .lit _ => pure e
+    | .const declName us =>
+      if env0.contains declName then pure e
+      else
+        let env ← getEnv
+        let some ci := env.find? declName
+          | pure e
+        let some body := ci.value? (allowOpaque := true)
+          | throwError "LeanHammer: could not inline auxiliary constant {declName}"
+        let levelMap :=
+          Std.HashMap.ofList (List.zip (ci.levelParams.map Level.param) us)
+        let body := body.replaceLevel (levelMap.get?)
+        inline body
+    | .app fn arg => return .app (← inline fn) (← inline arg)
+    | .lam name ty body bi => return .lam name (← inline ty) (← inline body) bi
+    | .forallE name ty body bi => return .forallE name (← inline ty) (← inline body) bi
+    | .letE name ty val body nd => return .letE name (← inline ty) (← inline val) (← inline body) nd
+    | .mdata d e => return .mdata d (← inline e)
+    | .proj s i e => return .proj s i (← inline e)
+  inline (← instantiateExprMVars e)
+
 /-- `wrapTactic` is borrowed from this Zulip thread:
     https://leanprover.zulipchat.com/#narrow/channel/270676-lean4/topic/Run.20tactics.20in.20parallel.20.28asynchronously.29/near/526382362 -/
 def wrapTactic {α : Type} (tactic : α → TacticM Unit) (cancelTk? : Option IO.CancelToken) (stxRef : Syntax) :
   TacticM (α → BaseIO (Except Exception (Option Expr × MessageLog))) := do
+  let env0 ← getEnv
   let ctx ← readThe Term.Context
   let termState ← getThe Term.State
+  let metaCtx ← readThe Meta.Context
+  -- Take `metaState` after `mkFreshExprSyntheticOpaqueMVar`: that extends `mctx` with the goal mvar.
   let mvar ← mkFreshExprSyntheticOpaqueMVar (← getMainTarget)
+  let metaState ← getThe Meta.State
   let runTac? (x : α) : TermElabM (Option Expr × MessageLog) := withRef stxRef do
     try
       Term.withoutModifyingElabMetaStateWithInfo do
@@ -73,13 +104,12 @@ def wrapTactic {α : Type} (tactic : α → TacticM Unit) (cancelTk? : Option IO
         let tryThisDelta := coreMessageLogDelta preCount (← Core.getMessageLog)
         if ngoals.isEmpty then
           let result ← instantiateMVars mvar
+          let result ← try inlineFreshProofs env0 result catch _ => return (none, tryThisDelta)
           if (← proofExprIncomplete result) then return (none, tryThisDelta)
           else return (some result, tryThisDelta)
         else return (none, tryThisDelta)
     catch _ =>
       return (none, {})
-  let metaCtx ← readThe Meta.Context
-  let metaState ← getThe Meta.State
   let tac (x : α) : CoreM (Option Expr × MessageLog) := do
     let (_captured, r) ←
       IO.FS.withIsolatedStreams (isolateStderr := true) <|
@@ -108,9 +138,6 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (tacs : Lis
   while h : 0 < remainingTasks.length do
     let (firstRes, otherTasks) ← IO.waitAny' remainingTasks h
     remainingTasks := otherTasks
-    /- **TODO** The current method of appending to Core's message log works, but particularly in cases where
-       Aesop returns a partial suggestion, it would be helpful to have the output be more organized (in particular,
-       I need to make it easier to see whether a suggestion includes `sorry`) -/
     match firstRes with
     | .ok (some res, fwdMsgs) =>
       g.assign res
