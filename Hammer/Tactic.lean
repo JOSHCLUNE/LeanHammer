@@ -20,6 +20,7 @@ set_library_suggestions open Lean.LibrarySuggestions in Cloud.premiseSelector <|
     This function is entirely sequential, parallel calls to Aesop alone or Lean-auto alone are handled elsewhere. -/
 def runAesopAndAuto (autoPremises : Array Term) (addIdentStxs : TSyntaxArray `Aesop.tactic_clause)
   (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit :=
+  -- **TODO** Experiment with adding calls to `grind` in this as well
   withMainContext do withOptions (fun o => o.set `aesop.warn.applyIff false) do
     let formulas ← withDuperOptions $ collectAssumptions autoPremises false #[]
     let formulas : List (Expr × Expr × Array Name × Bool × String) :=
@@ -35,17 +36,24 @@ def runAesopAndAuto (autoPremises : Array Term) (addIdentStxs : TSyntaxArray `Ae
     let ruleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedHammerCoreRuleTac)))
     Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit configOptions.aesopAutoPriority):num% tactic $ruleTacStx)))
 
+-- **TODO** Update option logic to address `grind`'s inclusion
 def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
   (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit :=
   withMainContext do
     let autoPremises := userInputTerms ++ premises.take configOptions.autoPremises
     let aesopPremises := userInputTerms ++ premises.take configOptions.aesopPremises
+    let grindPremises := userInputTerms ++ premises.take configOptions.grindPremises
     let mut addIdentStxs : TSyntaxArray `Aesop.tactic_clause := #[]
+    let mut grindParamStxs : TSyntaxArray `Lean.Parser.Tactic.grindParam := #[]
     for p in aesopPremises do
       -- **TODO** Add support for terms that aren't just names of premises
       let pFeature ← `(Aesop.feature| $(mkIdent p.raw.getId):ident)
       let tacticClause ← `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopPremisePriority):num % $pFeature:Aesop.feature))
       addIdentStxs := addIdentStxs.push tacticClause
+    for p in grindPremises do
+      -- **TODO** Add a filter (potentially using `mkEMatchTheoremAndSuggest`) to filter `grind` input
+      let grindParam ← `(Lean.Parser.Tactic.grindParam| $(mkIdent p.raw.getId):ident)
+      grindParamStxs := grindParamStxs.push grindParam
     if configOptions.disableAesop && configOptions.disableAuto then
       throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
     else if configOptions.disableAesop then
@@ -61,7 +69,7 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
             runAesopAndAuto autoPremises addIdentStxs includeLCtx configOptions,
             runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions,
             Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*)),
-            evalTactic (← `(tactic| grind?)) -- **TODO** `mkEMatchTheoremAndSuggest` can be used to filter `grind` input
+            evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
           ]
         else
           runAesopAndAuto autoPremises addIdentStxs includeLCtx configOptions
@@ -73,10 +81,10 @@ def evalHammerWithArgs : Tactic
   let goal ← getMainGoal
   let userInputTerms : Array Term := userInputTerms
   let configOptions ← parseConfigOptions configOptions
-  let maxSuggestions :=
-    if configOptions.disableAesop then configOptions.autoPremises
-    else if configOptions.disableAuto then configOptions.aesopPremises
-    else max configOptions.autoPremises configOptions.aesopPremises
+  let autoPremises := if configOptions.disableAuto then 0 else configOptions.autoPremises
+  let aesopPremises := if configOptions.disableAesop then 0 else configOptions.aesopPremises
+  let grindPremises := if configOptions.disableGrind then 0 else configOptions.grindPremises
+  let maxSuggestions := max autoPremises (max aesopPremises grindPremises)
   let librarySuggestionsConfig : LibrarySuggestions.Config := {
     maxSuggestions := maxSuggestions + userInputTerms.size, -- Add `userInputTerms.size` to ensure there are `maxSuggestions` non-duplicate premises
     caller := "hammer"

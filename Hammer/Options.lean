@@ -39,6 +39,11 @@ register_option hammer.disableAutoDefault : Bool := {
   descr := "The default value of the disableAuto option"
 }
 
+register_option hammer.disableGrindDefault : Bool := {
+  defValue := true
+  descr := "The default value of the disableGrind option"
+}
+
 register_option hammer.autoPremisesDefault : Nat := {
   defValue := 16
   descr := "The default number of premises sent to auto"
@@ -49,6 +54,11 @@ register_option hammer.aesopPremisesDefault : Nat := {
   descr := "The default number of premises sent to aesop to be used as unsafe rules"
 }
 
+register_option hammer.grindPremisesDefault : Nat := {
+  defValue := 32 -- **TODO** Need to figure out a good default value for this
+  descr := "The default number of premises sent to grind"
+}
+
 register_option hammer.aesopPremisePriorityDefault : Nat := {
   defValue := 20
   descr := "The default priority of premises sent to aesop"
@@ -57,6 +67,11 @@ register_option hammer.aesopPremisePriorityDefault : Nat := {
 register_option hammer.aesopAutoPriorityDefault : Nat := {
   defValue := 10
   descr := "The default priority of calls to auto within aesop"
+}
+
+register_option hammer.grindPremisePriorityDefault : Nat := {
+  defValue := 10 -- **TODO** Need to figure out a good default value for this
+  descr := "The default priority of calls to grind within aesop"
 }
 
 register_option hammer.parallelismDefault : Bool := {
@@ -76,10 +91,13 @@ def getHammerSolverTimeoutDefault (opts : Options) : Nat := hammer.solverTimeout
 def getPreprocessingDefault (opts : Options) : String := hammer.preprocessingDefault.get opts
 def getDisableAesopDefault (opts : Options) : Bool := hammer.disableAesopDefault.get opts
 def getDisableAutoDefault (opts : Options) : Bool := hammer.disableAutoDefault.get opts
+def getDisableGrindDefault (opts : Options) : Bool := hammer.disableGrindDefault.get opts
 def getAutoPremisesDefault (opts : Options) : Nat := hammer.autoPremisesDefault.get opts
 def getAesopPremisesDefault (opts : Options) : Nat := hammer.aesopPremisesDefault.get opts
+def getGrindPremisesDefault (opts : Options) : Nat := hammer.grindPremisesDefault.get opts
 def getAesopPremisePriorityDefault (opts : Options) : Nat := hammer.aesopPremisePriorityDefault.get opts
 def getAesopAutoPriorityDefault (opts : Options) : Nat := hammer.aesopAutoPriorityDefault.get opts
+def getGrindPremisePriorityDefault (opts : Options) : Nat := hammer.grindPremisePriorityDefault.get opts
 def getParallelismDefault (opts : Options) : Bool := hammer.parallelismDefault.get opts
 def getOutputAllSuggestionsDefault (opts : Options) : Bool := hammer.outputAllSuggestionsDefault.get opts
 
@@ -103,6 +121,10 @@ def getDisableAutoDefaultM : CoreM Bool := do
   let opts ← getOptions
   return getDisableAutoDefault opts
 
+def getDisableGrindDefaultM : CoreM Bool := do
+  let opts ← getOptions
+  return getDisableGrindDefault opts
+
 def getAutoPremisesDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getAutoPremisesDefault opts
@@ -111,6 +133,10 @@ def getAesopPremisesDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getAesopPremisesDefault opts
 
+def getGrindPremisesDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getGrindPremisesDefault opts
+
 def getAesopPremisePriorityDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getAesopPremisePriorityDefault opts
@@ -118,6 +144,10 @@ def getAesopPremisePriorityDefaultM : CoreM Nat := do
 def getAesopAutoPriorityDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getAesopAutoPriorityDefault opts
+
+def getGrindPremisePriorityDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getGrindPremisePriorityDefault opts
 
 def getParallelismDefaultM : CoreM Bool := do
   let opts ← getOptions
@@ -197,10 +227,13 @@ syntax (&"solverTimeout" " := " numLit) : Hammer.configOption
 syntax (&"preprocessing" " := " Hammer.preprocessing) : Hammer.configOption
 syntax (&"disableAuto" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"disableAesop" " := " Hammer.bool_lit) : Hammer.configOption
+syntax (&"disableGrind" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"autoPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `auto` (default: 16)
 syntax (&"aesopPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `aesop` (default: 32)
+syntax (&"grindPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `grind` (default: 32)
 syntax (&"aesopPremisePriority" " := " numLit) : Hammer.configOption -- The priority of premises sent to `aesop` (default: 20)
 syntax (&"aesopAutoPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `auto` within `aesop` (default: 10)
+syntax (&"grindPremisePriority" " := " numLit) : Hammer.configOption -- The priority of calls to `grind` within `aesop` (default: 10)
 syntax (&"parallelism" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to use parallelism (default: true)
 syntax (&"outputAllSuggestions" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to show the user all suggestions or just the first one (default: false)
 
@@ -210,10 +243,13 @@ structure ConfigurationOptions where
   preprocessing : Preprocessing
   disableAuto : Bool
   disableAesop : Bool
+  disableGrind : Bool
   aesopPremisePriority : Nat
   aesopAutoPriority : Nat
+  grindPremisePriority : Nat
   autoPremises : Nat -- The number of premises sent to `auto` (default: 16)
   aesopPremises : Nat -- The number of premises sent to `aesop` (default: 32)
+  grindPremises : Nat -- The number of premises sent to `grind` (default: 32)
   parallelism : Bool -- Whether to use parallelism (default: true)
   outputAllSuggestions : Bool -- Whether to show the user all suggestions or just the first one (default: false)
 deriving ToExpr
@@ -253,10 +289,13 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   let mut preprocessingOpt := none
   let mut disableAutoOpt := none
   let mut disableAesopOpt := none
+  let mut disableGrindOpt := none
   let mut autoPremisesOpt := none
   let mut aesopPremisesOpt := none
+  let mut grindPremisesOpt := none
   let mut aesopPremisePriorityOpt := none
   let mut aesopAutoPriorityOpt := none
+  let mut grindPremisePriorityOpt := none
   let mut parallelismOpt := none
   let mut outputAllSuggestionsOpt := none
   for configOptionStx in configOptionsStx do
@@ -276,18 +315,27 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| disableAesop := $disableAesopBoolLit:Hammer.bool_lit) =>
       if disableAesopOpt.isNone then disableAesopOpt := some $ ← elabBoolLit disableAesopBoolLit
       else throwError "Erroneous invocation of hammer: The disableAesop option has been specified multiple times"
+    | `(Hammer.configOption| disableGrind := $disableGrindBoolLit:Hammer.bool_lit) =>
+      if disableGrindOpt.isNone then disableGrindOpt := some $ ← elabBoolLit disableGrindBoolLit
+      else throwError "Erroneous invocation of hammer: The disableGrind option has been specified multiple times"
     | `(Hammer.configOption| autoPremises := $userAutoPremises:num) =>
       if autoPremisesOpt.isNone then autoPremisesOpt := some (TSyntax.getNat userAutoPremises)
       else throwError "Erroneous invocation of hammer: The autoPremises option has been specified multiple times"
     | `(Hammer.configOption| aesopPremises := $userAesopPremises:num) =>
       if aesopPremisesOpt.isNone then aesopPremisesOpt := some (TSyntax.getNat userAesopPremises)
       else throwError "Erroneous invocation of hammer: The aesopPremises option has been specified multiple times"
+    | `(Hammer.configOption| grindPremises := $userGrindPremises:num) =>
+      if grindPremisesOpt.isNone then grindPremisesOpt := some (TSyntax.getNat userGrindPremises)
+      else throwError "Erroneous invocation of hammer: The grindPremises option has been specified multiple times"
     | `(Hammer.configOption| aesopPremisePriority := $userAesopPremisePriority:num) =>
       if aesopPremisePriorityOpt.isNone then aesopPremisePriorityOpt := some (TSyntax.getNat userAesopPremisePriority)
       else throwError "Erroneous invocation of hammer: The aesopPremisePriority option has been specified multiple times"
     | `(Hammer.configOption| aesopAutoPriority := $userAesopAutoPriority:num) =>
       if aesopAutoPriorityOpt.isNone then aesopAutoPriorityOpt := some (TSyntax.getNat userAesopAutoPriority)
       else throwError "Erroneous invocation of hammer: The aesopAutoPriority option has been specified multiple times"
+    | `(Hammer.configOption| grindPremisePriority := $userGrindPremisePriority:num) =>
+      if grindPremisePriorityOpt.isNone then grindPremisePriorityOpt := some (TSyntax.getNat userGrindPremisePriority)
+      else throwError "Erroneous invocation of hammer: The grindPremisePriority option has been specified multiple times"
     | `(Hammer.configOption| parallelism := $parallelismBoolLit:Hammer.bool_lit) =>
       if parallelismOpt.isNone then parallelismOpt := some $ ← elabBoolLit parallelismBoolLit
       else throwError "Erroneous invocation of hammer: The parallelism option has been specified multiple times"
@@ -312,6 +360,10 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match disableAesopOpt with
     | none => getDisableAesopDefaultM
     | some disableAesop => pure disableAesop
+  let disableGrind ←
+    match disableGrindOpt with
+    | none => getDisableGrindDefaultM
+    | some disableGrind => pure disableGrind
   let preprocessing ←
     match preprocessingOpt with
     | none =>
@@ -326,6 +378,10 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match aesopPremisesOpt with
     | none => getAesopPremisesDefaultM
     | some aesopPremises => pure aesopPremises
+  let grindPremises ←
+    match grindPremisesOpt with
+    | none => getGrindPremisesDefaultM
+    | some grindPremises => pure grindPremises
   let aesopPremisePriority ←
     match aesopPremisePriorityOpt with
     | none => getAesopPremisePriorityDefaultM
@@ -334,6 +390,10 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match aesopAutoPriorityOpt with
     | none => getAesopAutoPriorityDefaultM
     | some aesopAutoPriority => pure aesopAutoPriority
+  let grindPremisePriority ←
+    match grindPremisePriorityOpt with
+    | none => getGrindPremisePriorityDefaultM
+    | some grindPremisePriority => pure grindPremisePriority
   let parallelism ←
     match parallelismOpt with
     | none => getParallelismDefaultM
@@ -344,8 +404,9 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | some outputAllSuggestions => pure outputAllSuggestions
   let configOptions := {
     solver := solver, solverTimeout := solverTimeout, preprocessing := preprocessing, disableAuto := disableAuto,
-    disableAesop := disableAesop, autoPremises := autoPremises, aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority,
-    aesopAutoPriority := aesopAutoPriority, parallelism := parallelism, outputAllSuggestions := outputAllSuggestions
+    disableGrind := disableGrind, disableAesop := disableAesop, autoPremises := autoPremises, aesopPremises := aesopPremises,
+    grindPremises := grindPremises, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority,
+    grindPremisePriority := grindPremisePriority, parallelism := parallelism, outputAllSuggestions := outputAllSuggestions
   }
   let configOptions ← validateConfigOptions configOptions
   return configOptions
