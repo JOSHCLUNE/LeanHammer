@@ -36,6 +36,20 @@ def runAesopAndAuto (autoPremises : Array Term) (addIdentStxs : TSyntaxArray `Ae
     let ruleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedHammerCoreRuleTac)))
     Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit configOptions.aesopAutoPriority):num% tactic $ruleTacStx)))
 
+/-- Checks whether `premiseName` corresponds to a constant that `grind` can use. The set of `thmKinds` that is tested was determined
+    by reading `Lean.Meta.Grind.mkEMatchTheoremAndSuggest`. -/
+def grindPremiseEligible (premiseName : Name) : MetaM Bool := do
+  let thmKinds : List Grind.EMatchTheoremKind :=
+    [.default false, .bwd false, .fwd, .rightLeft, .leftRight, .eqLhs false, .eqRhs false]
+  let prios ← Grind.getGlobalSymbolPriorities
+  for thmKind in thmKinds do
+    try
+      let _ ← Grind.mkEMatchTheoremForDecl premiseName thmKind prios (showInfo := false) (minIndexable := false)
+      return true -- `premiseName` is eligible because there was some `thmKind` for which `Grind.mkEMatchTheoremForDecl` succeeded
+    catch _ =>
+      continue
+  return false
+
 -- **TODO** Update option logic to address `grind`'s inclusion
 def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
   (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit :=
@@ -51,9 +65,9 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       let tacticClause ← `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopPremisePriority):num % $pFeature:Aesop.feature))
       addIdentStxs := addIdentStxs.push tacticClause
     for p in grindPremises do
-      -- **TODO** Add a filter (potentially using `mkEMatchTheoremAndSuggest`) to filter `grind` input
-      let grindParam ← `(Lean.Parser.Tactic.grindParam| $(mkIdent p.raw.getId):ident)
-      grindParamStxs := grindParamStxs.push grindParam
+      if ← grindPremiseEligible p.raw.getId then
+        let grindParam ← `(Lean.Parser.Tactic.grindParam| $(mkIdent p.raw.getId):ident)
+        grindParamStxs := grindParamStxs.push grindParam
     if configOptions.disableAesop && configOptions.disableAuto then
       throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
     else if configOptions.disableAesop then
