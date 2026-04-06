@@ -136,6 +136,7 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (tacs : Lis
   let mut completeSuggestions ← Core.getMessageLog
   let mut incompleteSuggestions ← Core.getMessageLog
   while h : 0 < remainingTasks.length do
+    Core.checkSystem s!"{decl_name%}"
     let (firstRes, otherTasks) ← IO.waitAny' remainingTasks h
     remainingTasks := otherTasks
     match firstRes with

@@ -92,26 +92,43 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
           grindPremiseNames := grindPremiseNames.push p.raw.getId
           let grindParam ← `(Lean.Parser.Tactic.grindParam| $(mkIdent p.raw.getId):ident)
           grindParamStxs := grindParamStxs.push grindParam
-    -- **TODO** Modify logic to account for `grind`'s inclusion
-    if configOptions.disableAesop && configOptions.disableAuto then
-      throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
-    else if configOptions.disableAesop then
-      runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
-    else if configOptions.disableAuto then
-      withOptions (fun o => o.set `aesop.warn.applyIff false) do
-        Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
+    if configOptions.parallelism then
+      match configOptions.disableAesop, configOptions.disableAuto, configOptions.disableGrind with
+      | true, true, false => evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
+      | true, false, true => runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
+      | false, true, true => runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions
+      | false, false, true =>
+        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions [
+          runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions,
+          runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx {configOptions with disableAuto := true, disableGrind := true},
+          runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
+        ]
+      | false, true, false =>
+        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions [
+          runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions,
+          runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx {configOptions with disableAuto := true, disableGrind := true},
+          evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
+        ]
+      | false, false, false =>
+        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions [
+          runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions,
+          runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx {configOptions with disableAuto := true, disableGrind := true},
+          runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions,
+          evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
+        ]
+      | true, false, false =>
+        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions [
+          runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions,
+          evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
+        ]
+      | true, true, true => throwError "Erroneous invocation of hammer: At least one of Aesop, Auto, and Grind must be enabled."
     else
-      withOptions (fun o => o.set `aesop.warn.applyIff false) do
-        -- **TODO** Tune parallelism options
-        if configOptions.parallelism then -- Run `Aesop+auto` setting in parallel with just Aesop and just Auto
-          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions [
-            runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions,
-            runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions,
-            Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*)),
-            evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
-          ]
-        else
-          runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions
+      match configOptions.disableAesop, configOptions.disableAuto, configOptions.disableGrind with
+      | true, true, false => evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
+      | true, false, true => runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
+      | false, _, _ => runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions
+      | true, false, false => throwError "Erroneous invocation of hammer: Aesop or parallelism is needed to enable both Auto and Grind."
+      | true, true, true => throwError "Erroneous invocation of hammer: At least one of Aesop, Auto, and Grind must be enabled."
 
 def evalHammerWithArgs : Tactic
 | `(tactic| hammer%$stxRef [$userInputTerms,*] {$configOptions,*}) => withoutModifyingEnv do
