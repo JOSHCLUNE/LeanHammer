@@ -110,4 +110,37 @@ def hammerCoreSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool
           let postGoals ← postGoals.mapM (mvarIdToSubgoal input.goal ·)
           return (postGoals, some #[step], some ⟨1.0⟩)
 
+/-- Runs `grind?` with `grind` parameters built from `grindPremiseNames`, then records the first `grind` tactic
+    that `grind?` suggests (the same suggestion the interactive `grind?` tactic would emit) as an Aesop script step. -/
+def grindSingleRuleTac (grindPremiseNames : Array Name) : SingleRuleTac := λ input => do
+  let preState ← saveState
+  input.goal.withContext do
+    Core.checkSystem s!"{decl_name%}"
+    let grindParamStxs : TSyntaxArray `Lean.Parser.Tactic.grindParam ←
+      grindPremiseNames.mapM (fun n => `(Lean.Parser.Tactic.grindParam| $(mkIdent n):ident))
+    let grindQuestionStx ← `(tactic| grind? [$grindParamStxs,*])
+    let tacsRef ← IO.mkRef (Option.none : Option (Array (TSyntax `tactic)))
+    let _ ← (Elab.Tactic.run input.goal do
+      let tacs ← Elab.Tactic.evalGrindTraceCore grindQuestionStx
+      let _ ← tacsRef.set (some tacs)
+      pure ()
+    ).run'
+    preState.restore
+    let some tacs ← tacsRef.get
+      | throwError "grindSingleRuleTac: failed to capture grind? suggestions"
+    if tacs.isEmpty then
+      throwError "grindSingleRuleTac: grind? produced no suggestions"
+    let grindTacStx := tacs[0]!
+    let tac := withoutRecover $ evalTactic grindTacStx
+    let postGoals := (← Elab.Tactic.run input.goal tac |>.run').toArray
+    let postState ← saveState
+    let tacticBuilder := pure $ .unstructured ⟨grindTacStx⟩
+    let step := {
+      preGoal := input.goal
+      tacticBuilders := #[tacticBuilder]
+      preState, postState, postGoals
+    }
+    let postGoals ← postGoals.mapM (mvarIdToSubgoal input.goal ·)
+    return (postGoals, some #[step], some ⟨1.0⟩)
+
 end HammerCore
