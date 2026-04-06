@@ -14,13 +14,19 @@ syntax (name := hammer) "hammer" (ppSpace "[" (term),* "]")? (ppSpace "{"Hammer.
 
 set_library_suggestions open Lean.LibrarySuggestions in Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
 
-/-- This functions produces one Aesop call where Aesop is given unsafe rules corresponding to individual
-    premise applications (these are determined by `addIdentStxs`) and one unsafe rule to call the
-    Lean-auto/Zipperposition/Duper pipeline (the premises passed into this pipeline is determined by `autoPremises`).
-    This function is entirely sequential, parallel calls to Aesop alone or Lean-auto alone are handled elsewhere. -/
-def runAesopAndAuto (autoPremises : Array Term) (addIdentStxs : TSyntaxArray `Aesop.tactic_clause)
-  (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit :=
-  -- **TODO** Experiment with adding calls to `grind` in this as well
+/-- This functions produces one Aesop call where Aesop is given:
+    - unsafe rules corresponding to individual premise applications (these are determined by `addIdentStxs`).
+    - one unsafe rule to call the Lean-auto/Zipperposition/Duper pipeline (if `configOptions.disableAuto` is
+      set to `false`). The premises passed into this pipeline is determined by `autoPremises`.
+    - one unsafe rule to call `grind?` (if `configOptions.disableGrind` is set to `false`). The premises passed
+      to `grind?` is determined by `grindParamStxs`.
+
+    **TODO** Need to incorporate the logic needed to disable auto and grind when `configOptions` indicates
+
+    This function is entirely sequential. Parallel calls to subcomponents are handled elsewhere. -/
+def runAesopWithSubprocedures (autoPremises : Array Term) (addIdentStxs : TSyntaxArray `Aesop.tactic_clause)
+  (_grindParamStxs : TSyntaxArray `Lean.Parser.Tactic.grindParam) (includeLCtx : Bool)
+  (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit :=
   withMainContext do withOptions (fun o => o.set `aesop.warn.applyIff false) do
     let formulas ← withDuperOptions $ collectAssumptions autoPremises false #[]
     let formulas : List (Expr × Expr × Array Name × Bool × String) :=
@@ -33,8 +39,13 @@ def runAesopAndAuto (autoPremises : Array Term) (addIdentStxs : TSyntaxArray `Ae
       mkDefinitionValEx `instantiatedHammerCoreRuleTac [] ruleTacType ruleTacVal
         ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedHammerCoreRuleTac]
     addAndCompile $ Declaration.defnDecl ruleTacDecl
-    let ruleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedHammerCoreRuleTac)))
-    Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* (add unsafe $(Syntax.mkNatLit configOptions.aesopAutoPriority):num% tactic $ruleTacStx)))
+    let autoRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedHammerCoreRuleTac)))
+    -- **TODO** Need to incorporate `grind` as an unsafe rule
+    Aesop.evalAesop $
+      (← `(tactic|
+        aesop? $addIdentStxs*
+          (add unsafe $(Syntax.mkNatLit configOptions.aesopAutoPriority):num% tactic $autoRuleTacStx)
+      ))
 
 /-- Checks whether `premiseName` corresponds to a constant that `grind` can use. The set of `thmKinds` that is tested was determined
     by reading `Lean.Meta.Grind.mkEMatchTheoremAndSuggest`. -/
@@ -80,13 +91,13 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
         -- **TODO** Tune parallelism options
         if configOptions.parallelism then -- Run `Aesop+auto` setting in parallel with just Aesop and just Auto
           tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions [
-            runAesopAndAuto autoPremises addIdentStxs includeLCtx configOptions,
+            runAesopWithSubprocedures autoPremises addIdentStxs grindParamStxs includeLCtx configOptions,
             runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions,
             Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*)),
             evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
           ]
         else
-          runAesopAndAuto autoPremises addIdentStxs includeLCtx configOptions
+          runAesopWithSubprocedures autoPremises addIdentStxs grindParamStxs includeLCtx configOptions
 
 def evalHammerWithArgs : Tactic
 | `(tactic| hammer%$stxRef [$userInputTerms,*] {$configOptions,*}) => withoutModifyingEnv do
