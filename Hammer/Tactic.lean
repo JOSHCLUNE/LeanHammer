@@ -60,19 +60,20 @@ def runAesopWithSubprocedures (autoPremises : Array Term) (addIdentStxs : TSynta
 partial def autoPremiseTypeEligibleAux (e : Expr) : MetaM Bool := do
   if ← Meta.isProof e then return false
   match e with
-  | .forallE _ t b _ =>
+  | .forallE n t b bi =>
     let tEligible ← autoPremiseTypeEligibleAux t
-    let bEligible ← autoPremiseTypeEligibleAux b
-    return tEligible && bEligible
-  | .lam _ t b _ =>
+    if !tEligible then return false
+    withLocalDecl n bi t fun x => autoPremiseTypeEligibleAux (b.instantiate1 x)
+  | .lam n t b bi =>
     let tEligible ← autoPremiseTypeEligibleAux t
-    let bEligible ← autoPremiseTypeEligibleAux b
-    return tEligible && bEligible
-  | .letE _ t v b _ =>
+    if !tEligible then return false
+    withLocalDecl n bi t fun x => autoPremiseTypeEligibleAux (b.instantiate1 x)
+  | .letE n t v b _ =>
     let tEligible ← autoPremiseTypeEligibleAux t
+    if !tEligible then return false
     let vEligible ← autoPremiseTypeEligibleAux v
-    let bEligible ← autoPremiseTypeEligibleAux b
-    return tEligible && vEligible && bEligible
+    if !vEligible then return false
+    withLetDecl n t v fun x => autoPremiseTypeEligibleAux (b.instantiate1 x)
   | .app e1 e2 =>
     let e1Eligible ← autoPremiseTypeEligibleAux e1
     let e2Eligible ← autoPremiseTypeEligibleAux e2
