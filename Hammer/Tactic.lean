@@ -63,30 +63,30 @@ def runAesopWithSubprocedures (autoPremises : Array Term) (addIdentStxs : TSynta
     `Meta.isProof`, `withLocalDecl`, and `withLetDecl` can throw errors when interacting with expressions
     with unassigned metavariables. In such cases, `autoPremiseTypeEligibleAux` errs on the side of declaring
     premises eligible, only ruling out premises that are conclusively determined to have proofs in them. -/
-partial def autoPremiseTypeEligibleAux (e : Expr) : MetaM Bool := do
+partial def autoPremiseEligibleAux (e : Expr) : MetaM Bool := do
   try
     if ← Meta.isProof e then return false
     match e with
     | .forallE n t b bi =>
-      let tEligible ← autoPremiseTypeEligibleAux t
+      let tEligible ← autoPremiseEligibleAux t
       if !tEligible then return false
-      withLocalDecl n bi t fun x => autoPremiseTypeEligibleAux (b.instantiate1 x)
+      withLocalDecl n bi t fun x => autoPremiseEligibleAux (b.instantiate1 x)
     | .lam n t b bi =>
-      let tEligible ← autoPremiseTypeEligibleAux t
+      let tEligible ← autoPremiseEligibleAux t
       if !tEligible then return false
-      withLocalDecl n bi t fun x => autoPremiseTypeEligibleAux (b.instantiate1 x)
+      withLocalDecl n bi t fun x => autoPremiseEligibleAux (b.instantiate1 x)
     | .letE n t v b _ =>
-      let tEligible ← autoPremiseTypeEligibleAux t
+      let tEligible ← autoPremiseEligibleAux t
       if !tEligible then return false
-      let vEligible ← autoPremiseTypeEligibleAux v
+      let vEligible ← autoPremiseEligibleAux v
       if !vEligible then return false
-      withLetDecl n t v fun x => autoPremiseTypeEligibleAux (b.instantiate1 x)
+      withLetDecl n t v fun x => autoPremiseEligibleAux (b.instantiate1 x)
     | .app e1 e2 =>
-      let e1Eligible ← autoPremiseTypeEligibleAux e1
-      let e2Eligible ← autoPremiseTypeEligibleAux e2
+      let e1Eligible ← autoPremiseEligibleAux e1
+      let e2Eligible ← autoPremiseEligibleAux e2
       return e1Eligible && e2Eligible
-    | .mdata _ b => autoPremiseTypeEligibleAux b
-    | .proj _ _ b => autoPremiseTypeEligibleAux b
+    | .mdata _ b => autoPremiseEligibleAux b
+    | .proj _ _ b => autoPremiseEligibleAux b
     | _ => return true
   catch _ =>
     return true
@@ -103,7 +103,7 @@ partial def autoPremiseTypeEligibleAux (e : Expr) : MetaM Bool := do
 def autoPremiseEligible (autoPremise : Term) : TacticM Bool := do
   let name ← realizeGlobalConstNoOverload autoPremise
   let type ← instantiateMVars (← getConstInfo name).type
-  autoPremiseTypeEligibleAux type
+  autoPremiseEligibleAux type
 
 /-- Checks whether `premiseName` corresponds to a constant that `grind` can use. The set of `thmKinds` that is tested was determined
     by reading `Lean.Meta.Grind.mkEMatchTheoremAndSuggest`. -/
