@@ -92,8 +92,12 @@ partial def autoPremiseTypeEligibleAux (e : Expr) : MetaM Bool := do
 def autoPremiseEligible (autoPremise : Term) : TacticM Bool := do
   let e ← Term.elabTerm autoPremise none
   let e ← instantiateMVars e
-  let eType ← inferType e
-  let eType ← instantiateMVars eType
+  /- Use the head constant's declared type when available. Otherwise `inferType` can miss binders
+     (e.g. `∀ {p : True → Prop}, …`) once implicit arguments become metavariables or applications. -/
+  let eType ←
+    match e.constName? with
+    | some name => instantiateMVars (← getConstInfo name).type
+    | none => instantiateMVars (← inferType e)
   autoPremiseTypeEligibleAux eType
 
 /-- Checks whether `premiseName` corresponds to a constant that `grind` can use. The set of `thmKinds` that is tested was determined
