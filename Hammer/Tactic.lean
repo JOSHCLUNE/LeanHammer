@@ -57,48 +57,53 @@ def runAesopWithSubprocedures (autoPremises : Array Term) (addIdentStxs : TSynta
     | false, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule))
     | false, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule $addGrindUnsafeRule))
 
+/-- Runs `Meta.isProof` on `e` and every subterm of `e`. If `Meta.isProof` ever returns `true`,
+    then `autoPremiseTypeEligibleAux` returns `false`.
+
+    `Meta.isProof`, `withLocalDecl`, and `withLetDecl` can throw errors when interacting with expressions
+    with unassigned metavariables. In such cases, `autoPremiseTypeEligibleAux` errs on the side of declaring
+    premises eligible, only ruling out premises that are conclusively determined to have proofs in them. -/
 partial def autoPremiseTypeEligibleAux (e : Expr) : MetaM Bool := do
-  if ← Meta.isProof e then return false
-  match e with
-  | .forallE n t b bi =>
-    let tEligible ← autoPremiseTypeEligibleAux t
-    if !tEligible then return false
-    withLocalDecl n bi t fun x => autoPremiseTypeEligibleAux (b.instantiate1 x)
-  | .lam n t b bi =>
-    let tEligible ← autoPremiseTypeEligibleAux t
-    if !tEligible then return false
-    withLocalDecl n bi t fun x => autoPremiseTypeEligibleAux (b.instantiate1 x)
-  | .letE n t v b _ =>
-    let tEligible ← autoPremiseTypeEligibleAux t
-    if !tEligible then return false
-    let vEligible ← autoPremiseTypeEligibleAux v
-    if !vEligible then return false
-    withLetDecl n t v fun x => autoPremiseTypeEligibleAux (b.instantiate1 x)
-  | .app e1 e2 =>
-    let e1Eligible ← autoPremiseTypeEligibleAux e1
-    let e2Eligible ← autoPremiseTypeEligibleAux e2
-    return e1Eligible && e2Eligible
-  | .mdata _ b => autoPremiseTypeEligibleAux b
-  | .proj _ _ b => autoPremiseTypeEligibleAux b
-  | _ => return true
+  try
+    if ← Meta.isProof e then return false
+    match e with
+    | .forallE n t b bi =>
+      let tEligible ← autoPremiseTypeEligibleAux t
+      if !tEligible then return false
+      withLocalDecl n bi t fun x => autoPremiseTypeEligibleAux (b.instantiate1 x)
+    | .lam n t b bi =>
+      let tEligible ← autoPremiseTypeEligibleAux t
+      if !tEligible then return false
+      withLocalDecl n bi t fun x => autoPremiseTypeEligibleAux (b.instantiate1 x)
+    | .letE n t v b _ =>
+      let tEligible ← autoPremiseTypeEligibleAux t
+      if !tEligible then return false
+      let vEligible ← autoPremiseTypeEligibleAux v
+      if !vEligible then return false
+      withLetDecl n t v fun x => autoPremiseTypeEligibleAux (b.instantiate1 x)
+    | .app e1 e2 =>
+      let e1Eligible ← autoPremiseTypeEligibleAux e1
+      let e2Eligible ← autoPremiseTypeEligibleAux e2
+      return e1Eligible && e2Eligible
+    | .mdata _ b => autoPremiseTypeEligibleAux b
+    | .proj _ _ b => autoPremiseTypeEligibleAux b
+    | _ => return true
+  catch _ =>
+    return true
 
 /-- Checks whether `autoPremise` contains any proofs within it, and returns `false` if so. Any premise that
     contains a proof within it cannot be soundly translated to higher-order logic by Lean-auto's procedure.
     There are other ways that premises can fail to be soundly translated to higher-order logic, but this
     filter does not yet catch those.
 
+    `autoPremiseEligible` assumes that `autoPremise` is just a constant name.
+
     **TODO** Test the efficacy of this filter and improve it if it remains common for premises to get through
     which cause Lean-auto's translation to fail. -/
 def autoPremiseEligible (autoPremise : Term) : TacticM Bool := do
-  let e ← Term.elabTerm autoPremise none
-  let e ← instantiateMVars e
-  /- Use the head constant's declared type when available. Otherwise `inferType` can miss binders
-     (e.g. `∀ {p : True → Prop}, …`) once implicit arguments become metavariables or applications. -/
-  let eType ←
-    match e.constName? with
-    | some name => instantiateMVars (← getConstInfo name).type
-    | none => instantiateMVars (← inferType e)
-  autoPremiseTypeEligibleAux eType
+  let name ← realizeGlobalConstNoOverload autoPremise
+  let type ← instantiateMVars (← getConstInfo name).type
+  autoPremiseTypeEligibleAux type
 
 /-- Checks whether `premiseName` corresponds to a constant that `grind` can use. The set of `thmKinds` that is tested was determined
     by reading `Lean.Meta.Grind.mkEMatchTheoremAndSuggest`. -/
