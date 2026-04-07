@@ -57,6 +57,44 @@ def runAesopWithSubprocedures (autoPremises : Array Term) (addIdentStxs : TSynta
     | false, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule))
     | false, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule $addGrindUnsafeRule))
 
+partial def autoPremiseTypeEligibleAux (e : Expr) : MetaM Bool := do
+  if ← Meta.isProof e then return false
+  match e with
+  | .forallE _ t b _ =>
+    let tEligible ← autoPremiseTypeEligibleAux t
+    let bEligible ← autoPremiseTypeEligibleAux b
+    return tEligible && bEligible
+  | .lam _ t b _ =>
+    let tEligible ← autoPremiseTypeEligibleAux t
+    let bEligible ← autoPremiseTypeEligibleAux b
+    return tEligible && bEligible
+  | .letE _ t v b _ =>
+    let tEligible ← autoPremiseTypeEligibleAux t
+    let vEligible ← autoPremiseTypeEligibleAux v
+    let bEligible ← autoPremiseTypeEligibleAux b
+    return tEligible && vEligible && bEligible
+  | .app e1 e2 =>
+    let e1Eligible ← autoPremiseTypeEligibleAux e1
+    let e2Eligible ← autoPremiseTypeEligibleAux e2
+    return e1Eligible && e2Eligible
+  | .mdata _ b => autoPremiseTypeEligibleAux b
+  | .proj _ _ b => autoPremiseTypeEligibleAux b
+  | _ => return true
+
+/-- Checks whether `autoPremise` contains any proofs within it, and returns `false` if so. Any premise that
+    contains a proof within it cannot be soundly translated to higher-order logic by Lean-auto's procedure.
+    There are other ways that premises can fail to be soundly translated to higher-order logic, but this
+    filter does not yet catch those.
+
+    **TODO** Test the efficacy of this filter and improve it if it remains common for premises to get through
+    which cause Lean-auto's translation to fail. -/
+def autoPremiseEligible (autoPremise : Term) : TacticM Bool := do
+  let e ← Term.elabTerm autoPremise none
+  let e ← instantiateMVars e
+  let eType ← inferType e
+  let eType ← instantiateMVars eType
+  autoPremiseTypeEligibleAux eType
+
 /-- Checks whether `premiseName` corresponds to a constant that `grind` can use. The set of `thmKinds` that is tested was determined
     by reading `Lean.Meta.Grind.mkEMatchTheoremAndSuggest`. -/
 def grindPremiseEligible (premiseName : Name) : MetaM Bool := do
@@ -74,12 +112,14 @@ def grindPremiseEligible (premiseName : Name) : MetaM Bool := do
 def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
   (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit :=
   withMainContext do
-    let autoPremises := userInputTerms ++ premises.take configOptions.autoPremises
+    let mut autoPremises := userInputTerms ++ premises.take configOptions.autoPremises
     let aesopPremises := userInputTerms ++ premises.take configOptions.aesopPremises
     let grindPremises := userInputTerms ++ premises.take configOptions.grindPremises
     let mut addIdentStxs : TSyntaxArray `Aesop.tactic_clause := #[]
     let mut grindParamStxs : TSyntaxArray `Lean.Parser.Tactic.grindParam := #[]
     let mut grindPremiseNames : Array Name := #[]
+    if !configOptions.disableAuto then
+      autoPremises ← autoPremises.filterM autoPremiseEligible
     if !configOptions.disableAesop then
       for p in aesopPremises do
         -- **TODO** Add support for terms that aren't just names of premises

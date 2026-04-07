@@ -265,7 +265,7 @@ macro_rules | `(tactic| hammerCore [$simpLemmas,*] [$facts,*]) => `(tactic| hamm
 /-- Checks to ensure that the set of given `configOptions` is usable. -/
 def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM ConfigurationOptions := do
   if !configOptions.parallelism && configOptions.outputAllSuggestions then
-    throwError "Erroneous invocation of hammer: The outputAllSuggestions option can only be used when parallelism is enabled"
+    throwError "Erroneous invocation of hammer: The outputAllSuggestions option can only be enabled when parallelism is enabled"
   if configOptions.disableAesop && configOptions.disableAuto then
     throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
   if configOptions.disableAesop && configOptions.preprocessing == Preprocessing.aesop then
