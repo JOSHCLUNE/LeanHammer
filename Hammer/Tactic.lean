@@ -148,26 +148,26 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       | true, false, true => runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
       | false, true, true => runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions
       | false, false, true =>
-        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions [
+        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
           runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions,
           runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx {configOptions with disableAuto := true, disableGrind := true},
           runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
         ]
       | false, true, false =>
-        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions [
+        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
           runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions,
           runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx {configOptions with disableAuto := true, disableGrind := true},
           evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
         ]
       | false, false, false =>
-        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions [
+        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
           runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions,
           runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx {configOptions with disableAuto := true, disableGrind := true},
           runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions,
           evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
         ]
       | true, false, false =>
-        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions [
+        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
           runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions,
           evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
         ]

@@ -119,18 +119,49 @@ def wrapTactic {α : Type} (tactic : α → TacticM Unit) (cancelTk? : Option IO
   let tac ← Lean.Core.wrapAsync tac cancelTk?
   pure (fun x => (tac x).toBaseIO)
 
+inductive TryAllTaskResult where
+  | tactic (r : Except Exception (Option Expr × MessageLog))
+  | wallclock
+
+/-- Sleeps for `totalMs` milliseconds in small steps, cooperatively exiting early if `IO.cancel` is
+    requested on this task. When the full duration elapses, activates `cancelTk` to cancel tactic
+    tasks that observe it via `Core.wrapAsync`. -/
+def wallclockSleepThenCancel (cancelTk : IO.CancelToken) (totalMs : Nat) : BaseIO Unit := do
+  let mut rem := totalMs
+  while rem > 0 do
+    if (← IO.checkCanceled) then
+      return ()
+    let chunk := min rem 100
+    IO.sleep chunk.toUInt32
+    rem := rem - chunk
+  IO.CancelToken.set cancelTk
+
 /-- `tryAllTacsOnGoal` runs all of the tactics supplied in `tacs` to the main goal. As soon as
     any of the tactics produce a result (of the form `.ok (some res)`), a cancellation token
     is sent to all other tasks. This approach assumes that all of the tactics in `tacs` check
-    `Core.checkSystem` with some regularity. -/
-def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (tacs : List (TacticM Unit)) : TacticM Unit := do
+    `Core.checkSystem` with some regularity.
+
+    If `wallclockTimeout` is greater than 0, an extra task sleeps for `wallclockTimeout` seconds (wall clock),
+    then sets the shared cancel token so every tactic task is cancelled. That timeout task cooperates with
+    `IO.cancel` so a successful tactic can stop the sleep when `outputAllSuggestions` is `false`. -/
+def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (wallclockTimeout : Nat)
+  (tacs : List (TacticM Unit)) : TacticM Unit := do
   let g ← getMainGoal
-  let mut tasks := #[]
+  let mut tasks : Array (Task TryAllTaskResult) := #[]
   let cancelTk ← IO.CancelToken.new
-  -- Create tasks
+  -- Create tasks for each tactic, and if `wallclockTimeout` is greater than 0, create a task for the wallclock timeout
   for tac in tacs do
-    let wrappedTac ← pure ((← wrapTactic (fun () => tac) cancelTk stxRef) ())
-    tasks := tasks.push (← (BaseIO.asTask wrappedTac))
+    let wrappedTac := (← wrapTactic (fun () => tac) cancelTk stxRef) ()
+    let t ← BaseIO.asTask do
+      let r ← wrappedTac
+      return TryAllTaskResult.tactic r
+    tasks := tasks.push t
+  if wallclockTimeout > 0 then -- A wallclock timeout of 0 is interpreted as no timeout
+    let wt ← BaseIO.asTask do
+      wallclockSleepThenCancel cancelTk (wallclockTimeout * 1000)
+      return TryAllTaskResult.wallclock
+    tasks := tasks.push wt
+  -- Wait for the tasks to complete, and handle the results
   let mut remainingTasks := tasks.toList
   let mut foundCompleteProof := false
   let mut completeSuggestions ← Core.getMessageLog
@@ -140,16 +171,21 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (tacs : Lis
     let (firstRes, otherTasks) ← IO.waitAny' remainingTasks h
     remainingTasks := otherTasks
     match firstRes with
-    | .ok (some res, fwdMsgs) =>
-      g.assign res
-      foundCompleteProof := true
-      completeSuggestions := completeSuggestions ++ fwdMsgs
-      if outputAllSuggestions then continue
-      else IO.CancelToken.set cancelTk; break
-    | .ok (none, fwdMsgs) => -- Tactic failed but didn't yield an error
-      incompleteSuggestions := incompleteSuggestions ++ fwdMsgs
-      continue
-    | .error _ => continue -- Tactic yielded an error
+    | .wallclock =>
+      IO.CancelToken.set cancelTk
+      break
+    | .tactic firstRes =>
+      match firstRes with
+      | .ok (some res, fwdMsgs) =>
+        g.assign res
+        foundCompleteProof := true
+        completeSuggestions := completeSuggestions ++ fwdMsgs
+        if outputAllSuggestions then continue
+        else IO.CancelToken.set cancelTk; break
+      | .ok (none, fwdMsgs) =>
+        incompleteSuggestions := incompleteSuggestions ++ fwdMsgs
+        continue
+      | .error _ => continue
   -- If any tactics returned with a complete success, only show the complete successes. Partial suggestions
   -- containing `sorry` should only be shown if none of the attempted tactics could find a complete proof.
   if foundCompleteProof then Core.setMessageLog completeSuggestions

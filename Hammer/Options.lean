@@ -20,8 +20,13 @@ register_option hammer.solverDefault : String := {
 }
 
 register_option hammer.solverTimeoutDefault : Nat := {
-  defValue := 10
+  defValue := 5
   descr := "The default timeout for the solver (in seconds)"
+}
+
+register_option hammer.wallclockTimeoutDefault : Nat := {
+  defValue := 10
+  descr := "The default wallclock timeout for `hammer` (in seconds). A timeout of 0 means no timeout."
 }
 
 register_option hammer.preprocessingDefault : String := {
@@ -88,6 +93,7 @@ namespace HammerCore
 
 def getHammerSolverDefault (opts : Options) : String := hammer.solverDefault.get opts
 def getHammerSolverTimeoutDefault (opts : Options) : Nat := hammer.solverTimeoutDefault.get opts
+def getHammerWallclockTimeoutDefault (opts : Options) : Nat := hammer.wallclockTimeoutDefault.get opts
 def getPreprocessingDefault (opts : Options) : String := hammer.preprocessingDefault.get opts
 def getDisableAesopDefault (opts : Options) : Bool := hammer.disableAesopDefault.get opts
 def getDisableAutoDefault (opts : Options) : Bool := hammer.disableAutoDefault.get opts
@@ -108,6 +114,10 @@ def getHammerSolverDefaultM : CoreM String := do
 def getHammerSolverTimeoutDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getHammerSolverTimeoutDefault opts
+
+def getHammerWallclockTimeoutDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getHammerWallclockTimeoutDefault opts
 
 def getPreprocessingDefaultM : CoreM String := do
   let opts ← getOptions
@@ -224,6 +234,7 @@ def elabBoolLit [Monad m] [MonadError m] (stx : TSyntax `Hammer.bool_lit) : m Bo
 
 syntax (&"solver" " := " Hammer.solverOption) : Hammer.configOption
 syntax (&"solverTimeout" " := " numLit) : Hammer.configOption
+syntax (&"wallclockTimeout" " := " numLit) : Hammer.configOption
 syntax (&"preprocessing" " := " Hammer.preprocessing) : Hammer.configOption
 syntax (&"disableAuto" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"disableAesop" " := " Hammer.bool_lit) : Hammer.configOption
@@ -240,6 +251,7 @@ syntax (&"outputAllSuggestions" " := " Hammer.bool_lit) : Hammer.configOption --
 structure ConfigurationOptions where
   solver : Solver
   solverTimeout : Nat
+  wallclockTimeout : Nat
   preprocessing : Preprocessing
   disableAuto : Bool
   disableAesop : Bool
@@ -264,6 +276,8 @@ macro_rules | `(tactic| hammerCore [$simpLemmas,*] [$facts,*]) => `(tactic| hamm
 
 /-- Checks to ensure that the set of given `configOptions` is usable. -/
 def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM ConfigurationOptions := do
+  if configOptions.wallclockTimeout < configOptions.solverTimeout then
+    throwError "Erroneous invocation of hammer: The wallclockTimeout must be greater than or equal to the solverTimeout"
   if !configOptions.parallelism && configOptions.outputAllSuggestions then
     throwError "Erroneous invocation of hammer: The outputAllSuggestions option can only be enabled when parallelism is enabled"
   if configOptions.disableAesop && configOptions.disableAuto then
@@ -286,6 +300,7 @@ def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM Confi
 def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : TacticM ConfigurationOptions := do
   let mut solverOpt := none
   let mut solverTimeoutOpt := none
+  let mut wallclockTimeoutOpt := none
   let mut preprocessingOpt := none
   let mut disableAutoOpt := none
   let mut disableAesopOpt := none
@@ -306,6 +321,9 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| solverTimeout := $userSolverTimeout:num) =>
       if solverTimeoutOpt.isNone then solverTimeoutOpt := some (TSyntax.getNat userSolverTimeout)
       else throwError "Erroneous invocation of hammer: The solverTimeout option has been specified multiple times"
+    | `(Hammer.configOption| wallclockTimeout := $userWallclockTimeout:num) =>
+      if wallclockTimeoutOpt.isNone then wallclockTimeoutOpt := some (TSyntax.getNat userWallclockTimeout)
+      else throwError "Erroneous invocation of hammer: The wallclockTimeout option has been specified multiple times"
     | `(Hammer.configOption| preprocessing := $preprocessing:Hammer.preprocessing) =>
       if preprocessingOpt.isNone then preprocessingOpt ← elabPreprocessing preprocessing
       else throwError "Erroneous invocation of hammer: The preprocessing option has been specified multiple times"
@@ -352,6 +370,10 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match solverTimeoutOpt with
     | none => getHammerSolverTimeoutDefaultM
     | some solverTimeout => pure solverTimeout
+  let wallclockTimeout ←
+    match wallclockTimeoutOpt with
+    | none => getHammerWallclockTimeoutDefaultM
+    | some wallclockTimeout => pure wallclockTimeout
   let disableAuto ←
     match disableAutoOpt with
     | none => getDisableAutoDefaultM
@@ -403,10 +425,11 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | none => getOutputAllSuggestionsDefaultM
     | some outputAllSuggestions => pure outputAllSuggestions
   let configOptions := {
-    solver := solver, solverTimeout := solverTimeout, preprocessing := preprocessing, disableAuto := disableAuto,
-    disableGrind := disableGrind, disableAesop := disableAesop, autoPremises := autoPremises, aesopPremises := aesopPremises,
-    grindPremises := grindPremises, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority,
-    aesopGrindPriority := aesopGrindPriority, parallelism := parallelism, outputAllSuggestions := outputAllSuggestions
+    solver := solver, solverTimeout := solverTimeout, wallclockTimeout := wallclockTimeout, preprocessing := preprocessing,
+    disableAuto := disableAuto, disableGrind := disableGrind, disableAesop := disableAesop, autoPremises := autoPremises,
+    aesopPremises := aesopPremises, grindPremises := grindPremises, aesopPremisePriority := aesopPremisePriority,
+    aesopAutoPriority := aesopAutoPriority, aesopGrindPriority := aesopGrindPriority, parallelism := parallelism,
+    outputAllSuggestions := outputAllSuggestions
   }
   let configOptions ← validateConfigOptions configOptions
   return configOptions
