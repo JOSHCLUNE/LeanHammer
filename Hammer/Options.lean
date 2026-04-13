@@ -45,7 +45,7 @@ register_option hammer.disableAutoDefault : Bool := {
 }
 
 register_option hammer.disableGrindDefault : Bool := {
-  defValue := true
+  defValue := false
   descr := "The default value of the disableGrind option"
 }
 
@@ -60,7 +60,7 @@ register_option hammer.aesopPremisesDefault : Nat := {
 }
 
 register_option hammer.grindPremisesDefault : Nat := {
-  defValue := 32 -- **TODO** Need to figure out a good default value for this
+  defValue := 32
   descr := "The default number of premises sent to grind"
 }
 
@@ -75,12 +75,12 @@ register_option hammer.aesopAutoPriorityDefault : Nat := {
 }
 
 register_option hammer.aesopGrindPriorityDefault : Nat := {
-  defValue := 10 -- **TODO** Need to figure out a good default value for this
+  defValue := 5
   descr := "The default priority of calls to grind within aesop"
 }
 
 register_option hammer.parallelismDefault : Bool := {
-  defValue := false
+  defValue := true
   descr := "The default value of the parallelism option"
 }
 
@@ -244,7 +244,7 @@ syntax (&"aesopPremises" " := " numLit) : Hammer.configOption -- The number of p
 syntax (&"grindPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `grind` (default: 32)
 syntax (&"aesopPremisePriority" " := " numLit) : Hammer.configOption -- The priority of premises sent to `aesop` (default: 20)
 syntax (&"aesopAutoPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `auto` within `aesop` (default: 10)
-syntax (&"aesopGrindPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `grind` within `aesop` (default: 10)
+syntax (&"aesopGrindPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `grind` within `aesop` (default: 5)
 syntax (&"parallelism" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to use parallelism (default: true)
 syntax (&"outputAllSuggestions" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to show the user all suggestions or just the first one (default: false)
 
@@ -276,7 +276,7 @@ macro_rules | `(tactic| hammerCore [$simpLemmas,*] [$facts,*]) => `(tactic| hamm
 
 /-- Checks to ensure that the set of given `configOptions` is usable. -/
 def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM ConfigurationOptions := do
-  if configOptions.wallclockTimeout < configOptions.solverTimeout then
+  if configOptions.wallclockTimeout > 0 && configOptions.wallclockTimeout < configOptions.solverTimeout then
     throwError "Erroneous invocation of hammer: The wallclockTimeout must be greater than or equal to the solverTimeout"
   if !configOptions.parallelism && configOptions.outputAllSuggestions then
     throwError "Erroneous invocation of hammer: The outputAllSuggestions option can only be enabled when parallelism is enabled"

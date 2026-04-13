@@ -67,7 +67,7 @@ Currently, LeanHammer consists of/depends on the following components:
 
 - **Premise selection**
   - A [cloud-based premise selector](https://github.com/hanwenzhu/premise-selection) developed specifically for LeanHammer
-  - [MePo](https://www.sciencedirect.com/science/article/pii/S1570868307000626) which has been widely used in Isabelle's Sledgehammer and was implemented in Lean by Kim Morrison
+  - A [Sine Qua Non premise selector](https://dl.acm.org/doi/10.5555/2032266.2032289) which was implemented in Lean by Kim Morrison
 - **Translation procedure**
   - [Lean-auto](https://github.com/leanprover-community/lean-auto) which serves as an interface to translate from Lean into TPTP and SMT
 - **Automatic theorem provers**
@@ -76,6 +76,7 @@ Currently, LeanHammer consists of/depends on the following components:
 - **Proof search and proof reconstruction tools native to Lean**
   - [Aesop](https://github.com/leanprover-community/aesop)
   - [Duper](https://github.com/leanprover-community/duper)
+  - [Grind](https://lean-lang.org/doc/reference/latest/The--grind--tactic/)
   - [Lean-SMT](https://github.com/ufmg-smite/lean-smt/tree/main) (Not yet integrated)
 
 The above list only consists of components that LeanHammer currently consists of/depends on. As additional components are added and integrated, they will be added to the above list.
@@ -90,14 +91,21 @@ The syntax for invoking the `hammer` tactic is `by hammer [lemmas] {options}`. T
 
 Each of the `options` supplied to `hammer` have the form `option := value` and are separated by commas. Options that can be used to customize a LeanHammer call include:
 
+- `wallClockTimeout`: Can be set to any Nat (default 5). This option determines the number of (wallclock) seconds LeanHammer will run before giving up and canceling any processes it spawned. If `wallClockTimeout` is set to 0, then LeanHammer will run until a `maxHeartbeats` limit is reached.
 - `disableAesop`: Can be set to `true` or `false` (default `false`). This option is used to remove Aesop from the LeanHammer call.
 - `disableAuto`: Can be set to `true` or `false` (default `false`). This option is used to remove Lean-auto, Zipperposition, and Duper from the LeanHammer call (each of these tools are part of a single pipeline)
+- `disableGrind`: Can be set to `true` or `false` (default `false`). This option is used to remove Grind from the LeanHammer call.
 - `preprocessing`: Can be set to `aesop`, `simp_target`, `simp_all`, or `no_preprocessing` (default `aesop`). This option determines whether the initial goal is first processed by `aesop`, `simp`, `simp_all`, or none of these. This option can only be set to a value other than `aesop` if `disableAesop` is set to `true`, and must be set to `aesop` if `disableAesop` is set to `false`.
 - `aesopPremises`: Can be set to any Nat (default 32). This option determines the number of lemmas from premise selection that are passed to Aesop as unsafe rules.
-- `autoPremises`: Can be set to any Nat (default 16). This option determines the number of lemmas from premises selection that are passed to Lean-auto, Zipperposition, and Duper.
+- `autoPremises`: Can be set to any Nat (default 16). This option determines the number of lemmas from premise selection that are passed to Lean-auto, Zipperposition, and Duper.
+- `grindPremises`: Can be set to any Nat (default 32). This option determines the number of lemmas from premise selection that are passed to Grind.
 - `aesopPremisePriority`: Can be set to any Nat between 0 and 100 (default 20). This option determines the Aesop success priority assigned to each of the lemmas from premise selection when passed to Aesop as unsafe rules. See [Aesop's README](https://github.com/leanprover-community/aesop) for additional details on the meaning of this success priority.
 - `aesopAutoPriority`: Can be set to any Nat between 0 and 100 (default 10). This option determines the Aesop success priority assigned to the unsafe rule that attempts to use Lean-auto, Zipperposition, and Duper to solve the current goal.
+- `aesopGrindPriority`: Can be set to any Nat between 0 and 100 (default 5). This option determines the Aesop success priority assigned to the unsafe rule that attempts to use Grind to solve the current goal.
 - `solver`: Can be set to `zipperposition_exe` or `zipperposition` (default `zipperposition_exe`). This option determines the external automatic theorem prover that Lean-auto sends its translated problem to. Currently, the only options are `zipperposition_exe` (which uses the Zipperposition executable that LeanHammer's post_update script retrieves) and `zipperposition` (which allows the user to use their own preinstalled version of Zipperposition).
+- `solverTimeout`: Can be set to any Nat (default 5). If `solverTimeout` is set to 0, then the external solver will not be used.
+- `parallelism`: Can be set to `true` or `false` (default `true`). This option determines whether LeanHammer creates multiple tasks to attempt to solve the goal via different approaches.
+- `outputAllSuggestions`: Can be set to `true` or `false` (default `false`). This option determines whether LeanHammer shows the user all of the proofs it finds or if it only shows the user the first proof it finds. Note that enabling this option is likely to increase LeanHammer's average runtime, because when `outputAllSuggestions` is set to `false`, LeanHammer can determine as soon as any proof is found, even if other proofs might be found later with more time. This option can only be set to `true` if `parallelism` is also set to `true`.
 
 Each of these options' defaults can be changed with `set_option hammer.<option_name>Default <new default>`. For example, the command that changes the default number of premises passed to Lean-auto from 16 to 32 is `set_option hammer.autoPremisesDefault 32`.
 
@@ -105,8 +113,8 @@ Each of these options' defaults can be changed with `set_option hammer.<option_n
 
 You can use:
 - `hammer` to run the full pipeline
-- `hammer {disableAuto := true}` to try Aesop with premise selection
-- `hammer {disableAesop := true, preprocessing := no_preprocessing}` to try Zipperposition and Duper with premise selection
+- `hammer {disableAuto := true}` to try Aesop and Grind with premise selection
+- `hammer {disableAesop := true, disableGrind := true, preprocessing := no_preprocessing}` to try Zipperposition and Duper with premise selection
 
 ### Premise Selection
 

@@ -157,7 +157,7 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (wallclockT
       return TryAllTaskResult.tactic r
     tasks := tasks.push t
   if wallclockTimeout > 0 then -- A wallclock timeout of 0 is interpreted as no timeout
-    let wt ← BaseIO.asTask do
+    let wt ← BaseIO.asTask (prio := Task.Priority.dedicated) do
       wallclockSleepThenCancel cancelTk (wallclockTimeout * 1000)
       return TryAllTaskResult.wallclock
     tasks := tasks.push wt
