@@ -1,5 +1,7 @@
 import Hammer.DuperCore
 import Hammer.Options
+import Hammer.AutoExtension
+import Aesop
 
 open Lean Meta Parser Elab Tactic Auto Duper Syntax
 
@@ -116,7 +118,7 @@ def runHammerCore (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser
 
   if (← getUnsolvedGoals).isEmpty then
     let tacticSeq ← `(tacticSeq| $preprocessingSuggestion*)
-    addTryThisTacticSeqSuggestion stxRef tacticSeq (← getRef)
+    Aesop.addTryThisTacticSeqSuggestion stxRef tacticSeq (← getRef)
     return -- The preprocessing call is sufficient to close all goals, so no more work needs to be done
 
   let lctxBeforeIntros ← getLCtx
@@ -196,7 +198,7 @@ def runHammerCore (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser
           tacticsArr := tacticsArr.push $ ← `(tactic| duper {preprocessing := full})
         -- Add tactic sequence suggestion
         let tacticSeq ← `(tacticSeq| $tacticsArr*)
-        addTryThisTacticSeqSuggestion stxRef tacticSeq (← getRef)
+        Aesop.addTryThisTacticSeqSuggestion stxRef tacticSeq (← getRef)
         tryCatchRuntimeEx
           (absurd.assign duperProof)
           throwProofFitError
