@@ -9,11 +9,6 @@ git = "https://github.com/hanwenzhu/premise-selection"
 rev = "v4.29.0"
 
 [[require]]
-name = "Qq"
-git = "https://github.com/leanprover-community/quote4.git"
-rev = "v4.29.0"
-
-[[require]]
 name = "«aesop»"
 git = "https://github.com/leanprover-community/aesop"
 rev = "v4.29.0"
@@ -21,6 +16,25 @@ rev = "v4.29.0"
 [[require]]
 name = "«Duper»"
 git = "https://github.com/leanprover-community/duper.git"
+rev = "v4.29.0"
+
+# Pin lean-auto to the hammer branch (a superset of main) so that
+# `runAutoGetHints` / `getZipperpositionExePath` are available. This must
+# appear before the `Smt` require so the hammer-branch pin wins over the
+# main-branch pin that lean-smt would otherwise pull in.
+[[require]]
+name = "auto"
+git = "https://github.com/leanprover-community/lean-auto.git"
+rev = "v4.29.0-hammer"
+
+[[require]]
+name = "«Smt»"
+git = "https://github.com/ufmg-smite/lean-smt.git"
+rev = "main"
+
+[[require]]
+name = "«mathlib»"
+git = "https://github.com/leanprover-community/mathlib4.git"
 rev = "v4.29.0"
 
 [[lean_lib]]

@@ -9,7 +9,7 @@ declare_syntax_cat Hammer.solverOption (behavior := symbol)
 declare_syntax_cat Hammer.preprocessing (behavior := symbol)
 -- An option to specify other configuration options for `hammer`
 declare_syntax_cat Hammer.configOption (behavior := symbol)
--- An option to indicate a boolean value (used for toggling `disableAesop` and `disableAuto`)
+-- An option to indicate a boolean value (used for toggling `disableAesop` and `disableDuper`)
 declare_syntax_cat Hammer.bool_lit (behavior := symbol)
 syntax "true" : Hammer.bool_lit
 syntax "false" : Hammer.bool_lit
@@ -34,14 +34,14 @@ register_option hammer.disableAesopDefault : Bool := {
   descr := "The default value of the disableAesop option"
 }
 
-register_option hammer.disableAutoDefault : Bool := {
+register_option hammer.disableDuperDefault : Bool := {
   defValue := false
-  descr := "The default value of the disableAuto option"
+  descr := "The default value of the disableDuper option"
 }
 
-register_option hammer.autoPremisesDefault : Nat := {
-  defValue := 16
-  descr := "The default number of premises sent to auto"
+register_option hammer.disableSmtDefault : Bool := {
+  defValue := false
+  descr := "The default value of the disableSmt option"
 }
 
 register_option hammer.aesopPremisesDefault : Nat := {
@@ -49,14 +49,29 @@ register_option hammer.aesopPremisesDefault : Nat := {
   descr := "The default number of premises sent to aesop to be used as unsafe rules"
 }
 
+register_option hammer.duperPremisesDefault : Nat := {
+  defValue := 16
+  descr := "The default number of premises sent to the auto/zipperposition/duper pipeline"
+}
+
+register_option hammer.smtPremisesDefault : Nat := {
+  defValue := 16
+  descr := "The default number of premises sent to lean-smt"
+}
+
 register_option hammer.aesopPremisePriorityDefault : Nat := {
   defValue := 20
   descr := "The default priority of premises sent to aesop"
 }
 
-register_option hammer.aesopAutoPriorityDefault : Nat := {
+register_option hammer.aesopDuperPriorityDefault : Nat := {
   defValue := 10
-  descr := "The default priority of calls to auto within aesop"
+  descr := "The default priority of calls to the auto/zipperposition/duper pipeline within aesop"
+}
+
+register_option hammer.smtPriorityDefault : Nat := {
+  defValue := 10
+  descr := "The default priority of calls to lean-smt"
 }
 
 namespace HammerCore
@@ -65,11 +80,14 @@ def getHammerSolverDefault (opts : Options) : String := hammer.solverDefault.get
 def getHammerSolverTimeoutDefault (opts : Options) : Nat := hammer.solverTimeoutDefault.get opts
 def getPreprocessingDefault (opts : Options) : String := hammer.preprocessingDefault.get opts
 def getDisableAesopDefault (opts : Options) : Bool := hammer.disableAesopDefault.get opts
-def getDisableAutoDefault (opts : Options) : Bool := hammer.disableAutoDefault.get opts
-def getAutoPremisesDefault (opts : Options) : Nat := hammer.autoPremisesDefault.get opts
+def getDisableDuperDefault (opts : Options) : Bool := hammer.disableDuperDefault.get opts
+def getDisableSmtDefault (opts : Options) : Bool := hammer.disableSmtDefault.get opts
+def getDuperPremisesDefault (opts : Options) : Nat := hammer.duperPremisesDefault.get opts
 def getAesopPremisesDefault (opts : Options) : Nat := hammer.aesopPremisesDefault.get opts
+def getSmtPremisesDefault (opts : Options) : Nat := hammer.smtPremisesDefault.get opts
 def getAesopPremisePriorityDefault (opts : Options) : Nat := hammer.aesopPremisePriorityDefault.get opts
-def getAesopAutoPriorityDefault (opts : Options) : Nat := hammer.aesopAutoPriorityDefault.get opts
+def getAesopDuperPriorityDefault (opts : Options) : Nat := hammer.aesopDuperPriorityDefault.get opts
+def getSmtPriorityDefault (opts : Options) : Nat := hammer.smtPriorityDefault.get opts
 
 def getHammerSolverDefaultM : CoreM String := do
   let opts ← getOptions
@@ -87,25 +105,37 @@ def getDisableAesopDefaultM : CoreM Bool := do
   let opts ← getOptions
   return getDisableAesopDefault opts
 
-def getDisableAutoDefaultM : CoreM Bool := do
+def getDisableDuperDefaultM : CoreM Bool := do
   let opts ← getOptions
-  return getDisableAutoDefault opts
+  return getDisableDuperDefault opts
 
-def getAutoPremisesDefaultM : CoreM Nat := do
+def getDisableSmtDefaultM : CoreM Bool := do
   let opts ← getOptions
-  return getAutoPremisesDefault opts
+  return getDisableSmtDefault opts
+
+def getDuperPremisesDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getDuperPremisesDefault opts
 
 def getAesopPremisesDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getAesopPremisesDefault opts
 
+def getSmtPremisesDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getSmtPremisesDefault opts
+
 def getAesopPremisePriorityDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getAesopPremisePriorityDefault opts
 
-def getAesopAutoPriorityDefaultM : CoreM Nat := do
+def getAesopDuperPriorityDefaultM : CoreM Nat := do
   let opts ← getOptions
-  return getAesopAutoPriorityDefault opts
+  return getAesopDuperPriorityDefault opts
+
+def getSmtPriorityDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getSmtPriorityDefault opts
 
 syntax "zipperposition_exe" : Hammer.solverOption
 syntax "zipperposition" : Hammer.solverOption
@@ -175,23 +205,29 @@ def elabBoolLit [Monad m] [MonadError m] (stx : TSyntax `Hammer.bool_lit) : m Bo
 syntax (&"solver" " := " Hammer.solverOption) : Hammer.configOption
 syntax (&"solverTimeout" " := " numLit) : Hammer.configOption
 syntax (&"preprocessing" " := " Hammer.preprocessing) : Hammer.configOption
-syntax (&"disableAuto" " := " Hammer.bool_lit) : Hammer.configOption
+syntax (&"disableDuper" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"disableAesop" " := " Hammer.bool_lit) : Hammer.configOption
-syntax (&"autoPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `auto` (default: 16)
+syntax (&"disableSmt" " := " Hammer.bool_lit) : Hammer.configOption
+syntax (&"duperPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to the auto/zipperposition/duper pipeline (default: 16)
 syntax (&"aesopPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `aesop` (default: 32)
+syntax (&"smtPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to lean-smt (default: 16)
 syntax (&"aesopPremisePriority" " := " numLit) : Hammer.configOption -- The priority of premises sent to `aesop` (default: 20)
-syntax (&"aesopAutoPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `auto` within `aesop` (default: 10)
+syntax (&"aesopDuperPriority" " := " numLit) : Hammer.configOption -- The priority of calls to the auto/zipperposition/duper pipeline within `aesop` (default: 10)
+syntax (&"aesopSmtPriority" " := " numLit) : Hammer.configOption -- The priority of calls to lean-smt (default: 10)
 
 structure ConfigurationOptions where
   solver : Solver
   solverTimeout : Nat
   preprocessing : Preprocessing
-  disableAuto : Bool
+  disableDuper : Bool
   disableAesop : Bool
+  disableSmt : Bool
   aesopPremisePriority : Nat
-  aesopAutoPriority : Nat
-  autoPremises : Nat -- The number of premises sent to `auto` (default: 16)
+  aesopDuperPriority : Nat
+  aesopSmtPriority : Nat
+  duperPremises : Nat -- The number of premises sent to the auto/zipperposition/duper pipeline (default: 16)
   aesopPremises : Nat -- The number of premises sent to `aesop` (default: 32)
+  smtPremises : Nat -- The number of premises sent to lean-smt (default: 16)
 deriving ToExpr
 
 syntax hammerStar := "*"
@@ -204,33 +240,36 @@ macro_rules | `(tactic| hammerCore [$simpLemmas,*] [$facts,*]) => `(tactic| hamm
 
 /-- Checks to ensure that the set of given `configOptions` is usable. -/
 def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM ConfigurationOptions := do
-  if configOptions.disableAesop && configOptions.disableAuto then
-    throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
+  if configOptions.disableAesop && configOptions.disableDuper && configOptions.disableSmt then
+    throwError "Erroneous invocation of hammer: The aesop, duper, and lean-smt options cannot all be disabled"
   if configOptions.disableAesop && configOptions.preprocessing == Preprocessing.aesop then
     throwError "Erroneous invocation of hammer: Preprocessing cannot be set to aesop when aesop is disabled"
   if !configOptions.disableAesop && configOptions.preprocessing != Preprocessing.aesop then
     throwError "Erroneous invocation of hammer: Preprocessing must be set to aesop when aesop is enabled"
-  if !configOptions.disableAuto && configOptions.solver == Solver.zipperposition_exe then
+  if !configOptions.disableDuper && configOptions.solver == Solver.zipperposition_exe then
     try
       let _ ← Auto.Solver.TPTP.getZipperpositionExePath -- This throws an error if the executable can't be found
     catch _ =>
-      if configOptions.disableAesop then
+      if configOptions.disableAesop && configOptions.disableSmt then
         throwError "The bundled zipperposition executable could not be found. To retrieve it, run `lake update Hammer`."
       else
-        logWarning "The bundled zipperposition executable could not be found. To retrieve it, run `lake update Hammer`. Continuing with auto disabled..."
-        return {configOptions with disableAuto := true}
+        logWarning "The bundled zipperposition executable could not be found. To retrieve it, run `lake update Hammer`. Continuing with duper disabled..."
+        return {configOptions with disableDuper := true}
   return configOptions
 
 def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : TacticM ConfigurationOptions := do
   let mut solverOpt := none
   let mut solverTimeoutOpt := none
   let mut preprocessingOpt := none
-  let mut disableAutoOpt := none
+  let mut disableDuperOpt := none
   let mut disableAesopOpt := none
-  let mut autoPremisesOpt := none
+  let mut disableSmtOpt := none
+  let mut duperPremisesOpt := none
   let mut aesopPremisesOpt := none
+  let mut smtPremisesOpt := none
   let mut aesopPremisePriorityOpt := none
-  let mut aesopAutoPriorityOpt := none
+  let mut aesopDuperPriorityOpt := none
+  let mut aesopSmtPriorityOpt := none
   for configOptionStx in configOptionsStx do
     match configOptionStx with
     | `(Hammer.configOption| solver := $solverName:Hammer.solverOption) =>
@@ -242,27 +281,36 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| preprocessing := $preprocessing:Hammer.preprocessing) =>
       if preprocessingOpt.isNone then preprocessingOpt ← elabPreprocessing preprocessing
       else throwError "Erroneous invocation of hammer: The preprocessing option has been specified multiple times"
-    | `(Hammer.configOption| disableAuto := $disableAutoBoolLit:Hammer.bool_lit) =>
-      if disableAutoOpt.isNone then disableAutoOpt := some $ ← elabBoolLit disableAutoBoolLit
-      else throwError "Erroneous invocation of hammer: The disableAuto option has been specified multiple times"
+    | `(Hammer.configOption| disableDuper := $disableDuperBoolLit:Hammer.bool_lit) =>
+      if disableDuperOpt.isNone then disableDuperOpt := some $ ← elabBoolLit disableDuperBoolLit
+      else throwError "Erroneous invocation of hammer: The disableDuper option has been specified multiple times"
     | `(Hammer.configOption| disableAesop := $disableAesopBoolLit:Hammer.bool_lit) =>
       if disableAesopOpt.isNone then disableAesopOpt := some $ ← elabBoolLit disableAesopBoolLit
       else throwError "Erroneous invocation of hammer: The disableAesop option has been specified multiple times"
-    | `(Hammer.configOption| autoPremises := $userAutoPremises:num) =>
-      if autoPremisesOpt.isNone then autoPremisesOpt := some (TSyntax.getNat userAutoPremises)
+    | `(Hammer.configOption| disableSmt := $disableSmtBoolLit:Hammer.bool_lit) =>
+      if disableSmtOpt.isNone then disableSmtOpt := some $ ← elabBoolLit disableSmtBoolLit
+      else throwError "Erroneous invocation of hammer: The disableLeanSmt option has been specified multiple times"
+    | `(Hammer.configOption| duperPremises := $userDuperPremises:num) =>
+      if duperPremisesOpt.isNone then duperPremisesOpt := some (TSyntax.getNat userDuperPremises)
       else throwError "Erroneous invocation of hammer: The autoPremises option has been specified multiple times"
     | `(Hammer.configOption| aesopPremises := $userAesopPremises:num) =>
       if aesopPremisesOpt.isNone then aesopPremisesOpt := some (TSyntax.getNat userAesopPremises)
       else throwError "Erroneous invocation of hammer: The aesopPremises option has been specified multiple times"
+    | `(Hammer.configOption| smtPremises := $userSmtPremises:num) =>
+      if smtPremisesOpt.isNone then smtPremisesOpt := some (TSyntax.getNat userSmtPremises)
+      else throwError "Erroneous invocation of hammer: The smtPremises option has been specified multiple times"
     | `(Hammer.configOption| aesopPremisePriority := $userAesopPremisePriority:num) =>
       if aesopPremisePriorityOpt.isNone then aesopPremisePriorityOpt := some (TSyntax.getNat userAesopPremisePriority)
       else throwError "Erroneous invocation of hammer: The aesopPremisePriority option has been specified multiple times"
-    | `(Hammer.configOption| aesopAutoPriority := $userAesopAutoPriority:num) =>
-      if aesopAutoPriorityOpt.isNone then aesopAutoPriorityOpt := some (TSyntax.getNat userAesopAutoPriority)
+    | `(Hammer.configOption| aesopDuperPriority := $userAesopDuperPriority:num) =>
+      if aesopDuperPriorityOpt.isNone then aesopDuperPriorityOpt := some (TSyntax.getNat userAesopDuperPriority)
       else throwError "Erroneous invocation of hammer: The aesopAutoPriority option has been specified multiple times"
+    | `(Hammer.configOption| aesopSmtPriority := $userSmtPriority:num) =>
+      if aesopSmtPriorityOpt.isNone then aesopSmtPriorityOpt := some (TSyntax.getNat userSmtPriority)
+      else throwError "Erroneous invocation of hammer: The aesopSmtPriority option has been specified multiple times"
     | _ => throwUnsupportedSyntax
   -- Set default values for options that were not specified
-  let solver ← -- **TODO** Will likely need to refactor/rethink `solver` option when incorporating lean-smt
+  let solver ← -- **TODO** Come up with a better name for the `solver` option, since it's exclusively used for the Lean-auto/Zipperposition/Duper pipeline
     match solverOpt with
     | none => elabSolverOptionDefault
     | some solver => pure solver
@@ -270,39 +318,52 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match solverTimeoutOpt with
     | none => getHammerSolverTimeoutDefaultM
     | some solverTimeout => pure solverTimeout
-  let disableAuto ←
-    match disableAutoOpt with
-    | none => getDisableAutoDefaultM
-    | some disableAuto => pure disableAuto
+  let disableDuper ←
+    match disableDuperOpt with
+    | none => getDisableDuperDefaultM
+    | some disableDuper => pure disableDuper
   let disableAesop ←
     match disableAesopOpt with
     | none => getDisableAesopDefaultM
     | some disableAesop => pure disableAesop
+  let disableSmt ←
+    match disableSmtOpt with
+    | none => getDisableSmtDefaultM
+    | some disableSmt => pure disableSmt
   let preprocessing ←
     match preprocessingOpt with
     | none =>
       if disableAesop && (← getPreprocessingDefaultM) == "aesop" then pure Preprocessing.simp_all
       else elabPreprocessingDefault
     | some preprocessing => pure preprocessing
-  let autoPremises ←
-    match autoPremisesOpt with
-    | none => getAutoPremisesDefaultM
-    | some autoPremises => pure autoPremises
+  let duperPremises ←
+    match duperPremisesOpt with
+    | none => getDuperPremisesDefaultM
+    | some duperPremises => pure duperPremises
   let aesopPremises ←
     match aesopPremisesOpt with
     | none => getAesopPremisesDefaultM
     | some aesopPremises => pure aesopPremises
+  let smtPremises ←
+    match smtPremisesOpt with
+    | none => getSmtPremisesDefaultM
+    | some smtPremises => pure smtPremises
   let aesopPremisePriority ←
     match aesopPremisePriorityOpt with
     | none => getAesopPremisePriorityDefaultM
     | some aesopPremisePriority => pure aesopPremisePriority
-  let aesopAutoPriority ←
-    match aesopAutoPriorityOpt with
-    | none => getAesopAutoPriorityDefaultM
-    | some aesopAutoPriority => pure aesopAutoPriority
+  let aesopDuperPriority ←
+    match aesopDuperPriorityOpt with
+    | none => getAesopDuperPriorityDefaultM
+    | some aesopDuperPriority => pure aesopDuperPriority
+  let aesopSmtPriority ←
+    match aesopSmtPriorityOpt with
+    | none => getSmtPriorityDefaultM
+    | some smtPriority => pure smtPriority
   let configOptions :=
-    {solver := solver, solverTimeout := solverTimeout, preprocessing := preprocessing, disableAuto := disableAuto, disableAesop := disableAesop, autoPremises := autoPremises,
-     aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority}
+    {solver := solver, solverTimeout := solverTimeout, preprocessing := preprocessing, disableDuper := disableDuper, disableAesop := disableAesop,
+     disableSmt := disableSmt, duperPremises := duperPremises, aesopPremises := aesopPremises, smtPremises := smtPremises, aesopPremisePriority := aesopPremisePriority,
+     aesopDuperPriority := aesopDuperPriority, aesopSmtPriority := aesopSmtPriority}
   let configOptions ← validateConfigOptions configOptions
   return configOptions
 
