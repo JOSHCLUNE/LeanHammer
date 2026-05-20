@@ -23,20 +23,20 @@ namespace Auto
 namespace Solver.SMT
 
 /-- `solverHints` includes:
-    - `preprocessFacts` : List (Parser.SMTTerm.Term)
-    - `theoryLemmas` : List (Parser.SMTTerm.Term)
-    - `instantiations` : List (Parser.SMTTerm.Term)
-    - `computationLemmas` : List (Parser.SMTTerm.Term)
-    - `polynomialLemmas` : List (Parser.SMTTerm.Term)
-    - `rewriteFacts` : List (List (Parser.SMTTerm.Term)) -/
+    - `preprocessFacts` : List (Parser.SMTSexp.Sexp)
+    - `theoryLemmas` : List (Parser.SMTSexp.Sexp)
+    - `instantiations` : List (Parser.SMTSexp.Sexp)
+    - `computationLemmas` : List (Parser.SMTSexp.Sexp)
+    - `polynomialLemmas` : List (Parser.SMTSexp.Sexp)
+    - `rewriteFacts` : List (List (Parser.SMTSexp.Sexp)) -/
 abbrev solverHints :=
-  List (Parser.SMTTerm.Term) × List (Parser.SMTTerm.Term) × List (Parser.SMTTerm.Term) ×
-  List (Parser.SMTTerm.Term) × List (Parser.SMTTerm.Term) × List (List (Parser.SMTTerm.Term))
+  List (Parser.SMTSexp.Sexp) × List (Parser.SMTSexp.Sexp) × List (Parser.SMTSexp.Sexp) ×
+  List (Parser.SMTSexp.Sexp) × List (Parser.SMTSexp.Sexp) × List (List (Parser.SMTSexp.Sexp))
 
 /-- Behaves like `Auto.Solver.SMT.querySolver` but assumes that the output came from `cvc5` with `--dump-hints` enabled. The
     additional output is used to return not just the unsatCore and proof, but also a list of theory lemmas. -/
 def querySolverWithHints (query : Array IR.SMT.Command)
-  : MetaM (Option (Parser.SMTTerm.Term × solverHints × String)) := do
+  : MetaM (Option (Parser.SMTSexp.Sexp × solverHints × String)) := do
   if !(auto.smt.get (← getOptions)) then
     throwError "querySolver :: Unexpected error"
   if (auto.smt.solver.name.get (← getOptions) == .none) then

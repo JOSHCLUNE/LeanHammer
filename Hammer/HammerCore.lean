@@ -174,35 +174,32 @@ def runHammerCore (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser
             else
               throwTranslationError e
           )
-      match configOptions.solver with
-      | Solver.zipperposition_exe | Solver.zipperposition =>
-        let mut tacticsArr := preprocessingSuggestion -- The array of tactics that will be suggested to the user
-        let unsatCoreDerivLeafStrings := solverHints.1
-        trace[hammer.debug] "unsatCoreDerivLeafStrings: {unsatCoreDerivLeafStrings}"
-        let duperConfigOptions :=
-          { portfolioMode := true, portfolioInstance := none, inhabitationReasoning := none, includeExpensiveRules := none,
-            preprocessing := some PreprocessingOption.FullPreprocessing, selFunction := none }
-        let (coreUserInputFacts, duperProof) ←
-          tryCatchRuntimeEx
-            (getDuperCoreLemmas unsatCoreDerivLeafStrings premises goalDecls includeLCtx duperConfigOptions)
-            throwDuperError
-        -- Build a Duper call using includeLCtx and each coreUserInputFact
-        -- **TODO** Add a setting that allows Duper to use Zipperposition's unsat core for lctx facts as well (not just user provided facts)
-        if coreUserInputFacts.size > 0 && includeLCtx then
-          tacticsArr := tacticsArr.push $ ← `(tactic| duper [*, $(coreUserInputFacts),*] {preprocessing := full})
-        else if coreUserInputFacts.size > 0 && !includeLCtx then
-          tacticsArr := tacticsArr.push $ ← `(tactic| duper [$(coreUserInputFacts),*] {preprocessing := full})
-        else if coreUserInputFacts.size == 0 && includeLCtx then
-          tacticsArr := tacticsArr.push $ ← `(tactic| duper [*] {preprocessing := full})
-        else -- coreUserInputFacts.size == 0 && !includeLCtx
-          tacticsArr := tacticsArr.push $ ← `(tactic| duper {preprocessing := full})
-        -- Add tactic sequence suggestion
-        let tacticSeq ← `(tacticSeq| $tacticsArr*)
-        Aesop.addTryThisTacticSeqSuggestion stxRef tacticSeq (← getRef)
+      let mut tacticsArr := preprocessingSuggestion -- The array of tactics that will be suggested to the user
+      let unsatCoreDerivLeafStrings := solverHints.1
+      trace[hammer.debug] "unsatCoreDerivLeafStrings: {unsatCoreDerivLeafStrings}"
+      let duperConfigOptions :=
+        { portfolioMode := true, portfolioInstance := none, inhabitationReasoning := none, includeExpensiveRules := none,
+          preprocessing := some PreprocessingOption.FullPreprocessing, selFunction := none }
+      let (coreUserInputFacts, duperProof) ←
         tryCatchRuntimeEx
-          (absurd.assign duperProof)
-          throwProofFitError
-      | Solver.cvc5 => throwError "evalHammer :: cvc5 support not yet implemented"
+          (getDuperCoreLemmas unsatCoreDerivLeafStrings premises goalDecls includeLCtx duperConfigOptions)
+          throwDuperError
+      -- Build a Duper call using includeLCtx and each coreUserInputFact
+      -- **TODO** Add a setting that allows Duper to use Zipperposition's unsat core for lctx facts as well (not just user provided facts)
+      if coreUserInputFacts.size > 0 && includeLCtx then
+        tacticsArr := tacticsArr.push $ ← `(tactic| duper [*, $(coreUserInputFacts),*] {preprocessing := full})
+      else if coreUserInputFacts.size > 0 && !includeLCtx then
+        tacticsArr := tacticsArr.push $ ← `(tactic| duper [$(coreUserInputFacts),*] {preprocessing := full})
+      else if coreUserInputFacts.size == 0 && includeLCtx then
+        tacticsArr := tacticsArr.push $ ← `(tactic| duper [*] {preprocessing := full})
+      else -- coreUserInputFacts.size == 0 && !includeLCtx
+        tacticsArr := tacticsArr.push $ ← `(tactic| duper {preprocessing := full})
+      -- Add tactic sequence suggestion
+      let tacticSeq ← `(tacticSeq| $tacticsArr*)
+      Aesop.addTryThisTacticSeqSuggestion stxRef tacticSeq (← getRef)
+      tryCatchRuntimeEx
+        (absurd.assign duperProof)
+        throwProofFitError
 
 @[tactic hammerCore]
 def evalHammerCore : Tactic

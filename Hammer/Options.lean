@@ -167,7 +167,6 @@ def getOutputAllSuggestionsDefaultM : CoreM Bool := do
   let opts ← getOptions
   return getOutputAllSuggestionsDefault opts
 
-syntax "zipperposition_exe" : Hammer.solverOption
 syntax "zipperposition" : Hammer.solverOption
 syntax "cvc5" : Hammer.solverOption
 
@@ -176,12 +175,6 @@ syntax "simp_all" : Hammer.preprocessing -- Corresponds to `simp_all`
 syntax "no_preprocessing" : Hammer.preprocessing -- Corresponds to skipping all preprocessing
 syntax "aesop" : Hammer.preprocessing -- Corresponds to integrating with `aesop` (thus using `aesop` for preprocessing)
 
-inductive Solver where
-| zipperposition_exe -- The default solver that uses the executable retrieved by `lean-auto`'s post-update hook
-| zipperposition -- Calls a local installation of Zipperposition
-| cvc5 -- Calls a local installation of cvc5
-deriving ToExpr, BEq
-
 inductive Preprocessing where
 | simp_target
 | simp_all
@@ -189,23 +182,7 @@ inductive Preprocessing where
 | aesop
 deriving BEq, ToExpr
 
-open Solver Preprocessing
-
-def elabSolverOption [Monad m] [MonadError m] (stx : TSyntax `Hammer.solverOption) : m Solver :=
-  withRef stx do
-    match stx with
-    | `(solverOption| zipperposition_exe) => return zipperposition_exe
-    | `(solverOption| zipperposition) => return zipperposition
-    | `(solverOption| cvc5) => return cvc5
-    | _ => Elab.throwUnsupportedSyntax
-
-def elabSolverOptionDefault : CoreM Solver := do
-  let solverName ← getHammerSolverDefaultM
-  match solverName with
-  | "zipperposition_exe" => return zipperposition_exe
-  | "zipperposition" => return zipperposition
-  | "cvc5" => return cvc5
-  | _ => throwError "Unsupported default solver option: {solverName}"
+open Preprocessing
 
 def elabPreprocessing [Monad m] [MonadError m] (stx : TSyntax `Hammer.preprocessing) : m Preprocessing :=
   withRef stx do
@@ -249,7 +226,6 @@ syntax (&"parallelism" " := " Hammer.bool_lit) : Hammer.configOption -- Whether 
 syntax (&"outputAllSuggestions" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to show the user all suggestions or just the first one (default: false)
 
 structure ConfigurationOptions where
-  solver : Solver
   solverTimeout : Nat
   wallclockTimeout : Nat
   preprocessing : Preprocessing
@@ -280,25 +256,33 @@ def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM Confi
     throwError "Erroneous invocation of hammer: The wallclockTimeout must be greater than or equal to the solverTimeout"
   if !configOptions.parallelism && configOptions.outputAllSuggestions then
     throwError "Erroneous invocation of hammer: The outputAllSuggestions option can only be enabled when parallelism is enabled"
-  if configOptions.disableAesop && configOptions.disableAuto then
-    throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
+  if configOptions.disableAesop && configOptions.disableAuto && configOptions.disableGrind then
+    throwError "Erroneous invocation of hammer: The aesop, auto, and grind options cannot all be disabled"
   if configOptions.disableAesop && configOptions.preprocessing == Preprocessing.aesop then
     throwError "Erroneous invocation of hammer: Preprocessing cannot be set to aesop when aesop is disabled"
   if !configOptions.disableAesop && configOptions.preprocessing != Preprocessing.aesop then
     throwError "Erroneous invocation of hammer: Preprocessing must be set to aesop when aesop is enabled"
-  if !configOptions.disableAuto && configOptions.solver == Solver.zipperposition_exe then
-    try
-      let _ ← Auto.Solver.TPTP.getZipperpositionExePath -- This throws an error if the executable can't be found
-    catch _ =>
-      if configOptions.disableAesop then
-        throwError "The bundled zipperposition executable could not be found. To retrieve it, run `lake update Hammer`."
-      else
-        logWarning "The bundled zipperposition executable could not be found. To retrieve it, run `lake update Hammer`. Continuing with auto disabled..."
+  if !configOptions.disableAuto then
+    let useDefault := auto.tptp.zipperposition.useDefault.get (← getOptions)
+    let defaultPath ← Auto.Solver.TPTP.zipperpositionDefaultPath
+    let err := (
+        s!"Cannot find automatically downloaded Zipperposition executable. " ++
+        s!"Try running \"lake build\" at the root directory of this project " ++
+        s!"to see if \"zipperposition.exe\" pops up in {defaultPath}. Alternatively, " ++
+        s!"you can link LeanHammer to your own installation of Zipperposition by setting " ++
+        s!"\"auto.tptp.zipperposition.useDefault\" to false and setting " ++
+        s!"\"auto.tptp.zipperposition.customPath\" to your own Zipperposition executable."
+      )
+    if useDefault && !(← defaultPath.pathExists) then
+      -- Log a warning and then continue with auto disabled if possible. Otherwise, just throw an error.
+      if !configOptions.disableAesop || !configOptions.disableGrind then
+        logWarning $ err ++ " Continuing with auto disabled..."
         return {configOptions with disableAuto := true}
+      else
+        throwError err
   return configOptions
 
 def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : TacticM ConfigurationOptions := do
-  let mut solverOpt := none
   let mut solverTimeoutOpt := none
   let mut wallclockTimeoutOpt := none
   let mut preprocessingOpt := none
@@ -315,9 +299,6 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   let mut outputAllSuggestionsOpt := none
   for configOptionStx in configOptionsStx do
     match configOptionStx with
-    | `(Hammer.configOption| solver := $solverName:Hammer.solverOption) =>
-      if solverOpt.isNone then solverOpt ← elabSolverOption solverName
-      else throwError "Erroneous invocation of hammer: The solver option has been specified multiple times"
     | `(Hammer.configOption| solverTimeout := $userSolverTimeout:num) =>
       if solverTimeoutOpt.isNone then solverTimeoutOpt := some (TSyntax.getNat userSolverTimeout)
       else throwError "Erroneous invocation of hammer: The solverTimeout option has been specified multiple times"
@@ -362,10 +343,6 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
       else throwError "Erroneous invocation of hammer: The outputAllSuggestions option has been specified multiple times"
     | _ => throwUnsupportedSyntax
   -- Set default values for options that were not specified
-  let solver ← -- **TODO** Will likely need to refactor/rethink `solver` option when incorporating lean-smt
-    match solverOpt with
-    | none => elabSolverOptionDefault
-    | some solver => pure solver
   let solverTimeout ←
     match solverTimeoutOpt with
     | none => getHammerSolverTimeoutDefaultM
@@ -425,7 +402,7 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | none => getOutputAllSuggestionsDefaultM
     | some outputAllSuggestions => pure outputAllSuggestions
   let configOptions := {
-    solver := solver, solverTimeout := solverTimeout, wallclockTimeout := wallclockTimeout, preprocessing := preprocessing,
+    solverTimeout := solverTimeout, wallclockTimeout := wallclockTimeout, preprocessing := preprocessing,
     disableAuto := disableAuto, disableGrind := disableGrind, disableAesop := disableAesop, autoPremises := autoPremises,
     aesopPremises := aesopPremises, grindPremises := grindPremises, aesopPremisePriority := aesopPremisePriority,
     aesopAutoPriority := aesopAutoPriority, aesopGrindPriority := aesopGrindPriority, parallelism := parallelism,
@@ -435,30 +412,16 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   return configOptions
 
 def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (configOptions : ConfigurationOptions) (x : m α) : m α :=
-  match configOptions.solver with
-  | zipperposition_exe =>
-    withOptions
-      (fun o =>
-        let o := o.set `auto.tptp true
-        let o := o.set `auto.tptp.timeout configOptions.solverTimeout
-        let o := o.set `auto.smt false
-        let o := o.set `auto.tptp.premiseSelection true
-        let o := o.set `auto.tptp.solver.name "zipperposition_exe"
-        let o := o.set `auto.mono.ignoreNonQuasiHigherOrder true
-        o.set `auto.native true
-      ) x
-  | zipperposition =>
-    withOptions
-      (fun o =>
-        let o := o.set `auto.tptp true
-        let o := o.set `auto.tptp.timeout configOptions.solverTimeout
-        let o := o.set `auto.smt false
-        let o := o.set `auto.tptp.premiseSelection true
-        let o := o.set `auto.tptp.solver.name "zipperposition"
-        let o := o.set `auto.mono.ignoreNonQuasiHigherOrder true
-        o.set `auto.native true
-      ) x
-  | cvc5 => throwError "cvc5 hammer support not implemented yet"
+  withOptions
+    (fun o =>
+      let o := o.set `auto.tptp true
+      let o := o.set `auto.tptp.timeout configOptions.solverTimeout
+      let o := o.set `auto.smt false
+      let o := o.set `auto.tptp.premiseSelection true
+      let o := o.set `auto.tptp.solver.name "zipperposition"
+      let o := o.set `auto.mono.ignoreNonQuasiHigherOrder true
+      o.set `auto.native true
+    ) x
 
 def withDuperOptions [Monad m] [MonadError m] [MonadWithOptions m] (x : m α) : m α :=
   withOptions
