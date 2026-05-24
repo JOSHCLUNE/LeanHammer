@@ -150,18 +150,28 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (wallclockT
   let mut tasks : Array (Task TryAllTaskResult) := #[]
   let cancelTk ← IO.CancelToken.new
   -- Create tasks for each tactic, and if `wallclockTimeout` is greater than 0, create a task for the wallclock timeout
+  let buildParallelTacticsStart ← IO.monoMsNow
+  let taskEventsRef ← IO.mkRef (#[] : Array String)
+  let mut taskIdx := 0
   for tac in tacs do
     let wrappedTac := (← wrapTactic (fun () => tac) cancelTk stxRef) ()
     let t ← BaseIO.asTask do
+      let startMs ← IO.monoMsNow
+      taskEventsRef.modify (·.push s!"Task {taskIdx} started at +{startMs - buildParallelTacticsStart}ms")
       let r ← wrappedTac
+      let endMs ← IO.monoMsNow
+      taskEventsRef.modify (·.push s!"Task {taskIdx} ended at +{endMs - buildParallelTacticsStart}ms (duration {endMs - startMs}ms)")
       return TryAllTaskResult.tactic r
     tasks := tasks.push t
+    taskIdx := taskIdx + 1
   if wallclockTimeout > 0 then -- A wallclock timeout of 0 is interpreted as no timeout
     let wt ← BaseIO.asTask (prio := Task.Priority.dedicated) do
       wallclockSleepThenCancel cancelTk (wallclockTimeout * 1000)
       return TryAllTaskResult.wallclock
     tasks := tasks.push wt
+  trace[hammer.profiling] "Building parallel tactics took {(← IO.monoMsNow) - buildParallelTacticsStart}ms"
   -- Wait for the tasks to complete, and handle the results
+  let runParallelTacticsStart ← IO.monoMsNow
   let mut remainingTasks := tasks.toList
   let mut foundCompleteProof := false
   let mut completeSuggestions ← Core.getMessageLog
@@ -186,6 +196,9 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (wallclockT
         incompleteSuggestions := incompleteSuggestions ++ fwdMsgs
         continue
       | .error _ => continue
+  trace[hammer.profiling] "Running parallel tactics took {(← IO.monoMsNow) - runParallelTacticsStart}ms"
+  for event in (← taskEventsRef.get) do
+    trace[hammer.profiling] "{event}"
   -- If any tactics returned with a complete success, only show the complete successes. Partial suggestions
   -- containing `sorry` should only be shown if none of the attempted tactics could find a complete proof.
   if foundCompleteProof then Core.setMessageLog completeSuggestions

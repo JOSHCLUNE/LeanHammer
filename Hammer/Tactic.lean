@@ -4,7 +4,9 @@ import PremiseSelection
 import Aesop
 import Qq
 
-initialize Lean.registerTraceClass `hammer.premises
+initialize
+  Lean.registerTraceClass `hammer.premises
+  Lean.registerTraceClass `hammer.profiling
 
 namespace Hammer
 
@@ -119,9 +121,18 @@ def grindPremiseEligible (premiseName : Name) : MetaM Bool := do
       continue
   return false
 
+/-- Wraps a single-tactic dispatch with `hammer.profiling` timing. Used when `tryAllTacsOnGoal`
+    is not invoked (parallelism disabled, or only one of Aesop/Auto/Grind is enabled), so the
+    `Running parallel tactics took ...` trace is inapplicable. -/
+def runSingularTactic (tac : TacticM Unit) : TacticM Unit := do
+  let singularTacticStart ← IO.monoMsNow
+  tac
+  trace[hammer.profiling] "Running singular tactic took {(← IO.monoMsNow) - singularTacticStart}ms"
+
 def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tactic.simpErase, `Lean.Parser.Tactic.simpLemma] ",")
   (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit :=
   withMainContext do
+    let premiseFilteringStart ← IO.monoMsNow
     let mut autoPremises := userInputTerms ++ premises.take configOptions.autoPremises
     let aesopPremises := userInputTerms ++ premises.take configOptions.aesopPremises
     let grindPremises := userInputTerms ++ premises.take configOptions.grindPremises
@@ -142,11 +153,12 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
           grindPremiseNames := grindPremiseNames.push p.raw.getId
           let grindParam ← `(Lean.Parser.Tactic.grindParam| $(mkIdent p.raw.getId):ident)
           grindParamStxs := grindParamStxs.push grindParam
+    trace[hammer.profiling] "Premise filtering took {(← IO.monoMsNow) - premiseFilteringStart}ms"
     if configOptions.parallelism then
       match configOptions.disableAesop, configOptions.disableAuto, configOptions.disableGrind with
-      | true, true, false => evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
-      | true, false, true => runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
-      | false, true, true => runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions
+      | true, true, false => runSingularTactic (evalTactic (← `(tactic| grind? [$grindParamStxs,*])))
+      | true, false, true => runSingularTactic (runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions)
+      | false, true, true => runSingularTactic (runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions)
       | false, false, true =>
         tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
           runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions,
@@ -174,9 +186,9 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       | true, true, true => throwError "Erroneous invocation of hammer: At least one of Aesop, Auto, and Grind must be enabled."
     else
       match configOptions.disableAesop, configOptions.disableAuto, configOptions.disableGrind with
-      | true, true, false => evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
-      | true, false, true => runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
-      | false, _, _ => runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions
+      | true, true, false => runSingularTactic (evalTactic (← `(tactic| grind? [$grindParamStxs,*])))
+      | true, false, true => runSingularTactic (runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions)
+      | false, _, _ => runSingularTactic (runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions)
       | true, false, false => throwError "Erroneous invocation of hammer: Aesop or parallelism is needed to enable both Auto and Grind."
       | true, true, true => throwError "Erroneous invocation of hammer: At least one of Aesop, Auto, and Grind must be enabled."
 
@@ -208,11 +220,13 @@ def evalHammerWithArgs : Tactic
   let selector ← getSelector
   let defaultSelector := Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
   let selector := selector.getD defaultSelector
+  let premiseSelectionStart ← IO.monoMsNow
   let premises ←
     if maxSuggestions == 0 then pure #[] -- If `maxSuggestions` is 0, then we don't need to waste time calling the premise selector
     else selector goal librarySuggestionsConfig
   let premises ← premises.mapM (fun p => unresolveNameGlobal p.name)
   let premises ← premises.mapM (fun p => return (← `(term| $(mkIdent p))))
+  trace[hammer.profiling] "Premise selection took {(← IO.monoMsNow) - premiseSelectionStart}ms"
   trace[hammer.premises] "user input terms: {userInputTerms}"
   trace[hammer.premises] "premises from premise selector: {premises}"
   let premises := premises.filter (fun p => !userInputTerms.contains p) -- Remove duplicates between `userInputTerms` and `premises`
