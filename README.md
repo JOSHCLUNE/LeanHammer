@@ -91,7 +91,7 @@ The syntax for invoking the `hammer` tactic is `by hammer [lemmas] {options}`. T
 
 Each of the `options` supplied to `hammer` have the form `option := value` and are separated by commas. Options that can be used to customize a LeanHammer call include:
 
-- `wallClockTimeout`: Can be set to any Nat (default 5). This option determines the number of (wallclock) seconds LeanHammer will run before giving up and canceling any processes it spawned. If `wallClockTimeout` is set to 0, then LeanHammer will run until a `maxHeartbeats` limit is reached.
+- `wallclockTimeout`: Can be set to any Nat (default 5). This option determines the number of (wallclock) seconds LeanHammer will run before giving up and canceling any processes it spawned. If `wallclockTimeout` is set to 0, then LeanHammer will run until a `maxHeartbeats` limit is reached.
 - `disableAesop`: Can be set to `true` or `false` (default `false`). This option is used to remove Aesop from the LeanHammer call.
 - `disableAuto`: Can be set to `true` or `false` (default `false`). This option is used to remove Lean-auto, Zipperposition, and Duper from the LeanHammer call (each of these tools are part of a single pipeline)
 - `disableGrind`: Can be set to `true` or `false` (default `false`). This option is used to remove Grind from the LeanHammer call.
