@@ -84,10 +84,12 @@ partial def inlineFreshProofs (env0 : Environment) (e : Expr) : MetaM Expr := do
     | .proj s i e => return .proj s i (← inline e)
   inline (← instantiateExprMVars e)
 
-/-- `wrapTactic` is borrowed from this Zulip thread:
+/-- `wrapTactic` is adapted from this Zulip thread:
     https://leanprover.zulipchat.com/#narrow/channel/270676-lean4/topic/Run.20tactics.20in.20parallel.20.28asynchronously.29/near/526382362 -/
-def wrapTactic {α : Type} (tactic : α → TacticM Unit) (cancelTk? : Option IO.CancelToken) (stxRef : Syntax) :
+def wrapTactic {α : Type} (tactic : α → TacticM Unit) (cancelTk? : Option IO.CancelToken) (stxRef : Syntax)
+  (taskIdx buildParallelTacticsStart : Nat) (taskEventsRef : IO.Ref (Array String)) :
   TacticM (α → BaseIO (Except Exception (Option Expr × MessageLog))) := do
+  taskEventsRef.modify (·.push s!"Task {taskIdx} wrapTactic call started at +{(← IO.monoMsNow) - buildParallelTacticsStart}ms")
   let env0 ← getEnv
   let ctx ← readThe Term.Context
   let termState ← getThe Term.State
@@ -97,17 +99,25 @@ def wrapTactic {α : Type} (tactic : α → TacticM Unit) (cancelTk? : Option IO
   let metaState ← getThe Meta.State
   let runTac? (x : α) : TermElabM (Option Expr × MessageLog) := withRef stxRef do
     try
+      taskEventsRef.modify (·.push s!"Task {taskIdx} runTac? call started at +{(← IO.monoMsNow) - buildParallelTacticsStart}ms")
       Term.withoutModifyingElabMetaStateWithInfo do
         let preCount := (← Core.getMessageLog).reportedPlusUnreported.size
         let ngoals ← Term.withSynthesize (postpone := .no) do
           Tactic.run mvar.mvarId! (tactic x)
         let tryThisDelta := coreMessageLogDelta preCount (← Core.getMessageLog)
         if ngoals.isEmpty then
+          taskEventsRef.modify (·.push s!"Task {taskIdx} confirmed that all goals were resolved at +{(← IO.monoMsNow) - buildParallelTacticsStart}ms")
           let result ← instantiateMVars mvar
           let result ← try inlineFreshProofs env0 result catch _ => return (none, tryThisDelta)
-          if (← proofExprIncomplete result) then return (none, tryThisDelta)
-          else return (some result, tryThisDelta)
-        else return (none, tryThisDelta)
+          if (← proofExprIncomplete result) then
+            taskEventsRef.modify (·.push s!"Task {taskIdx} confirmed to yield an incomplete proof at +{(← IO.monoMsNow) - buildParallelTacticsStart}ms")
+            return (none, tryThisDelta)
+          else
+            taskEventsRef.modify (·.push s!"Task {taskIdx} confirmed to yield a complete proof at +{(← IO.monoMsNow) - buildParallelTacticsStart}ms")
+            return (some result, tryThisDelta)
+        else
+          taskEventsRef.modify (·.push s!"Task {taskIdx} confirmed not all goals were resolved at +{(← IO.monoMsNow) - buildParallelTacticsStart}ms")
+          return (none, tryThisDelta)
     catch _ =>
       return (none, {})
   let tac (x : α) : CoreM (Option Expr × MessageLog) := do
@@ -154,7 +164,7 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (wallclockT
   let taskEventsRef ← IO.mkRef (#[] : Array String)
   let mut taskIdx := 0
   for tac in tacs do
-    let wrappedTac := (← wrapTactic (fun () => tac) cancelTk stxRef) ()
+    let wrappedTac := (← wrapTactic (fun () => tac) cancelTk stxRef taskIdx buildParallelTacticsStart taskEventsRef) ()
     let t ← BaseIO.asTask do
       let startMs ← IO.monoMsNow
       taskEventsRef.modify (·.push s!"Task {taskIdx} started at +{startMs - buildParallelTacticsStart}ms")
@@ -179,6 +189,7 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (wallclockT
   while h : 0 < remainingTasks.length do
     Core.checkSystem s!"{decl_name%}"
     let (firstRes, otherTasks) ← IO.waitAny' remainingTasks h
+    trace[hammer.profiling] "Time until some task completed: {(← IO.monoMsNow) - runParallelTacticsStart}ms"
     remainingTasks := otherTasks
     match firstRes with
     | .wallclock =>
@@ -187,6 +198,7 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (wallclockT
     | .tactic firstRes =>
       match firstRes with
       | .ok (some res, fwdMsgs) =>
+        trace[hammer.profiling] "Time until the first complete proof was found: {(← IO.monoMsNow) - runParallelTacticsStart}ms"
         g.assign res
         foundCompleteProof := true
         completeSuggestions := completeSuggestions ++ fwdMsgs
