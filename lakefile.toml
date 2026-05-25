@@ -21,7 +21,7 @@ rev = "v4.29.0"
 [[require]]
 name = "«Duper»"
 git = "https://github.com/leanprover-community/duper.git"
-rev = "5a86587eb5d6d7092e1c3eed9b432bff8c153a2e"
+rev = "249caf17f24b84909c58a5755def73a3f763e3cb"
 
 [[lean_lib]]
 name = "Hammer"
