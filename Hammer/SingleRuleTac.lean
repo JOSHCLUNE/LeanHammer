@@ -78,36 +78,66 @@ def hammerCoreSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool
               else
                 throwTranslationError e
             )
-        match configOptions.solver with
-        | Solver.cvc5 => throwError "evalHammer :: cvc5 support not yet implemented"
-        | Solver.zipperposition_exe | Solver.zipperposition =>
-          let unsatCoreDerivLeafStrings := solverHints.1
-          trace[hammer.debug] "unsatCoreDerivLeafStrings: {unsatCoreDerivLeafStrings}"
-          -- Collect all formulas that appear in the unsat core and have a `stxOpt`
-          -- **TODO** Add a setting that allows Duper to use Zipperposition's unsat core for lctx facts as well (not just user provided facts)
-          let coreFormulas := formulas.filterMap
-            (fun (_, _, _, _, stxOpt) => stxOpt.filter (fun stx => unsatCoreIncludesFactAsString unsatCoreDerivLeafStrings stx))
-          let coreFormulas := coreFormulas.map (fun s => Lean.mkIdent s.toName) -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
-          -- Build a Duper call using includeLCtx and each coreUserInputFact
-          let stx ←
-            if !coreFormulas.isEmpty && includeLCtx then
-              `(tactic| duper [*, $(coreFormulas.toArray),*] {preprocessing := full})
-            else if !coreFormulas.isEmpty && !includeLCtx then
-              `(tactic| duper [$(coreFormulas.toArray),*] {preprocessing := full})
-            else if coreFormulas.isEmpty && includeLCtx then
-              `(tactic| duper [*] {preprocessing := full})
-            else -- coreFormulas.isEmpty && !includeLCtx
-              `(tactic| duper {preprocessing := full})
-          let tac := withoutRecover $ evalTactic stx
-          let postGoals := (← Elab.Tactic.run absurd tac |>.run').toArray
-          let postState ← saveState
-          let tacticBuilder := pure $ .unstructured ⟨stx⟩
-          let step := {
-            preGoal := input.goal
-            tacticBuilders := #[tacticBuilder]
-            preState, postState, postGoals
-          }
-          let postGoals ← postGoals.mapM (mvarIdToSubgoal input.goal ·)
-          return (postGoals, some #[step], some ⟨1.0⟩)
+        let unsatCoreDerivLeafStrings := solverHints.1
+        trace[hammer.debug] "unsatCoreDerivLeafStrings: {unsatCoreDerivLeafStrings}"
+        -- Collect all formulas that appear in the unsat core and have a `stxOpt`
+        -- **TODO** Add a setting that allows Duper to use Zipperposition's unsat core for lctx facts as well (not just user provided facts)
+        let coreFormulas := formulas.filterMap
+          (fun (_, _, _, _, stxOpt) => stxOpt.filter (fun stx => unsatCoreIncludesFactAsString unsatCoreDerivLeafStrings stx))
+        let coreFormulas := coreFormulas.map (fun s => Lean.mkIdent s.toName) -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
+        -- Build a Duper call using includeLCtx and each coreUserInputFact
+        let stx ←
+          if !coreFormulas.isEmpty && includeLCtx then
+            `(tactic| duper [*, $(coreFormulas.toArray),*] {preprocessing := full})
+          else if !coreFormulas.isEmpty && !includeLCtx then
+            `(tactic| duper [$(coreFormulas.toArray),*] {preprocessing := full})
+          else if coreFormulas.isEmpty && includeLCtx then
+            `(tactic| duper [*] {preprocessing := full})
+          else -- coreFormulas.isEmpty && !includeLCtx
+            `(tactic| duper {preprocessing := full})
+        let tac := withoutRecover $ evalTactic stx
+        let postGoals := (← Elab.Tactic.run absurd tac |>.run').toArray
+        let postState ← saveState
+        let tacticBuilder := pure $ .unstructured ⟨stx⟩
+        let step := {
+          preGoal := input.goal
+          tacticBuilders := #[tacticBuilder]
+          preState, postState, postGoals
+        }
+        let postGoals ← postGoals.mapM (mvarIdToSubgoal input.goal ·)
+        return (postGoals, some #[step], some ⟨1.0⟩)
+
+/-- Runs `grind?` with `grind` parameters built from `grindPremiseNames`, then records the first `grind` tactic
+    that `grind?` suggests (the same suggestion the interactive `grind?` tactic would emit) as an Aesop script step. -/
+def grindSingleRuleTac (grindPremiseNames : Array Name) : SingleRuleTac := λ input => do
+  let preState ← saveState
+  input.goal.withContext do
+    Core.checkSystem s!"{decl_name%}"
+    let grindParamStxs : TSyntaxArray `Lean.Parser.Tactic.grindParam ←
+      grindPremiseNames.mapM (fun n => `(Lean.Parser.Tactic.grindParam| $(mkIdent n):ident))
+    let grindQuestionStx ← `(tactic| grind? [$grindParamStxs,*])
+    let tacsRef ← IO.mkRef (Option.none : Option (Array (TSyntax `tactic)))
+    let _ ← (Elab.Tactic.run input.goal do
+      let tacs ← Elab.Tactic.evalGrindTraceCore grindQuestionStx
+      let _ ← tacsRef.set (some tacs)
+      pure ()
+    ).run'
+    preState.restore
+    let some tacs ← tacsRef.get
+      | throwError "grindSingleRuleTac: failed to capture grind? suggestions"
+    if tacs.isEmpty then
+      throwError "grindSingleRuleTac: grind? produced no suggestions"
+    let grindTacStx := tacs[0]!
+    let tac := withoutRecover $ evalTactic grindTacStx
+    let postGoals := (← Elab.Tactic.run input.goal tac |>.run').toArray
+    let postState ← saveState
+    let tacticBuilder := pure $ .unstructured ⟨grindTacStx⟩
+    let step := {
+      preGoal := input.goal
+      tacticBuilders := #[tacticBuilder]
+      preState, postState, postGoals
+    }
+    let postGoals ← postGoals.mapM (mvarIdToSubgoal input.goal ·)
+    return (postGoals, some #[step], some ⟨1.0⟩)
 
 end HammerCore

@@ -3,8 +3,6 @@ import Auto
 
 open Lean Parser Elab Tactic
 
--- An option to specify the external prover that `hammer` uses
-declare_syntax_cat Hammer.solverOption (behavior := symbol)
 -- An option to specify the preprocessing that `hammer` uses
 declare_syntax_cat Hammer.preprocessing (behavior := symbol)
 -- An option to specify other configuration options for `hammer`
@@ -14,14 +12,14 @@ declare_syntax_cat Hammer.bool_lit (behavior := symbol)
 syntax "true" : Hammer.bool_lit
 syntax "false" : Hammer.bool_lit
 
-register_option hammer.solverDefault : String := {
-  defValue := "zipperposition_exe"
-  descr := "The default value of the solver option"
+register_option hammer.solverTimeoutDefault : Nat := {
+  defValue := 5
+  descr := "The default timeout for the solver (in seconds)"
 }
 
-register_option hammer.solverTimeoutDefault : Nat := {
+register_option hammer.wallclockTimeoutDefault : Nat := {
   defValue := 10
-  descr := "The default timeout for the solver (in seconds)"
+  descr := "The default wallclock timeout for `hammer` (in seconds). A timeout of 0 means no timeout."
 }
 
 register_option hammer.preprocessingDefault : String := {
@@ -39,6 +37,11 @@ register_option hammer.disableAutoDefault : Bool := {
   descr := "The default value of the disableAuto option"
 }
 
+register_option hammer.disableGrindDefault : Bool := {
+  defValue := false
+  descr := "The default value of the disableGrind option"
+}
+
 register_option hammer.autoPremisesDefault : Nat := {
   defValue := 16
   descr := "The default number of premises sent to auto"
@@ -47,6 +50,11 @@ register_option hammer.autoPremisesDefault : Nat := {
 register_option hammer.aesopPremisesDefault : Nat := {
   defValue := 32
   descr := "The default number of premises sent to aesop to be used as unsafe rules"
+}
+
+register_option hammer.grindPremisesDefault : Nat := {
+  defValue := 32
+  descr := "The default number of premises sent to grind"
 }
 
 register_option hammer.aesopPremisePriorityDefault : Nat := {
@@ -59,25 +67,45 @@ register_option hammer.aesopAutoPriorityDefault : Nat := {
   descr := "The default priority of calls to auto within aesop"
 }
 
+register_option hammer.aesopGrindPriorityDefault : Nat := {
+  defValue := 5
+  descr := "The default priority of calls to grind within aesop"
+}
+
+register_option hammer.parallelismDefault : Bool := {
+  defValue := true
+  descr := "The default value of the parallelism option"
+}
+
+register_option hammer.outputAllSuggestionsDefault : Bool := {
+  defValue := false
+  descr := "The default value of the outputAllSuggestions option"
+}
+
 namespace HammerCore
 
-def getHammerSolverDefault (opts : Options) : String := hammer.solverDefault.get opts
 def getHammerSolverTimeoutDefault (opts : Options) : Nat := hammer.solverTimeoutDefault.get opts
+def getHammerWallclockTimeoutDefault (opts : Options) : Nat := hammer.wallclockTimeoutDefault.get opts
 def getPreprocessingDefault (opts : Options) : String := hammer.preprocessingDefault.get opts
 def getDisableAesopDefault (opts : Options) : Bool := hammer.disableAesopDefault.get opts
 def getDisableAutoDefault (opts : Options) : Bool := hammer.disableAutoDefault.get opts
+def getDisableGrindDefault (opts : Options) : Bool := hammer.disableGrindDefault.get opts
 def getAutoPremisesDefault (opts : Options) : Nat := hammer.autoPremisesDefault.get opts
 def getAesopPremisesDefault (opts : Options) : Nat := hammer.aesopPremisesDefault.get opts
+def getGrindPremisesDefault (opts : Options) : Nat := hammer.grindPremisesDefault.get opts
 def getAesopPremisePriorityDefault (opts : Options) : Nat := hammer.aesopPremisePriorityDefault.get opts
 def getAesopAutoPriorityDefault (opts : Options) : Nat := hammer.aesopAutoPriorityDefault.get opts
-
-def getHammerSolverDefaultM : CoreM String := do
-  let opts ← getOptions
-  return getHammerSolverDefault opts
+def getAesopGrindPriorityDefault (opts : Options) : Nat := hammer.aesopGrindPriorityDefault.get opts
+def getParallelismDefault (opts : Options) : Bool := hammer.parallelismDefault.get opts
+def getOutputAllSuggestionsDefault (opts : Options) : Bool := hammer.outputAllSuggestionsDefault.get opts
 
 def getHammerSolverTimeoutDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getHammerSolverTimeoutDefault opts
+
+def getHammerWallclockTimeoutDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getHammerWallclockTimeoutDefault opts
 
 def getPreprocessingDefaultM : CoreM String := do
   let opts ← getOptions
@@ -91,6 +119,10 @@ def getDisableAutoDefaultM : CoreM Bool := do
   let opts ← getOptions
   return getDisableAutoDefault opts
 
+def getDisableGrindDefaultM : CoreM Bool := do
+  let opts ← getOptions
+  return getDisableGrindDefault opts
+
 def getAutoPremisesDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getAutoPremisesDefault opts
@@ -98,6 +130,10 @@ def getAutoPremisesDefaultM : CoreM Nat := do
 def getAesopPremisesDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getAesopPremisesDefault opts
+
+def getGrindPremisesDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getGrindPremisesDefault opts
 
 def getAesopPremisePriorityDefaultM : CoreM Nat := do
   let opts ← getOptions
@@ -107,20 +143,22 @@ def getAesopAutoPriorityDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getAesopAutoPriorityDefault opts
 
-syntax "zipperposition_exe" : Hammer.solverOption
-syntax "zipperposition" : Hammer.solverOption
-syntax "cvc5" : Hammer.solverOption
+def getAesopGrindPriorityDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getAesopGrindPriorityDefault opts
+
+def getParallelismDefaultM : CoreM Bool := do
+  let opts ← getOptions
+  return getParallelismDefault opts
+
+def getOutputAllSuggestionsDefaultM : CoreM Bool := do
+  let opts ← getOptions
+  return getOutputAllSuggestionsDefault opts
 
 syntax "simp_target" : Hammer.preprocessing -- Corresponds to `simp`
 syntax "simp_all" : Hammer.preprocessing -- Corresponds to `simp_all`
 syntax "no_preprocessing" : Hammer.preprocessing -- Corresponds to skipping all preprocessing
 syntax "aesop" : Hammer.preprocessing -- Corresponds to integrating with `aesop` (thus using `aesop` for preprocessing)
-
-inductive Solver where
-| zipperposition_exe -- The default solver that uses the executable retrieved by `lean-auto`'s post-update hook
-| zipperposition -- Calls a local installation of Zipperposition
-| cvc5 -- Calls a local installation of cvc5
-deriving ToExpr, BEq
 
 inductive Preprocessing where
 | simp_target
@@ -129,23 +167,7 @@ inductive Preprocessing where
 | aesop
 deriving BEq, ToExpr
 
-open Solver Preprocessing
-
-def elabSolverOption [Monad m] [MonadError m] (stx : TSyntax `Hammer.solverOption) : m Solver :=
-  withRef stx do
-    match stx with
-    | `(solverOption| zipperposition_exe) => return zipperposition_exe
-    | `(solverOption| zipperposition) => return zipperposition
-    | `(solverOption| cvc5) => return cvc5
-    | _ => Elab.throwUnsupportedSyntax
-
-def elabSolverOptionDefault : CoreM Solver := do
-  let solverName ← getHammerSolverDefaultM
-  match solverName with
-  | "zipperposition_exe" => return zipperposition_exe
-  | "zipperposition" => return zipperposition
-  | "cvc5" => return cvc5
-  | _ => throwError "Unsupported default solver option: {solverName}"
+open Preprocessing
 
 def elabPreprocessing [Monad m] [MonadError m] (stx : TSyntax `Hammer.preprocessing) : m Preprocessing :=
   withRef stx do
@@ -172,26 +194,36 @@ def elabBoolLit [Monad m] [MonadError m] (stx : TSyntax `Hammer.bool_lit) : m Bo
     | `(bool_lit| false) => return false
     | _ => Elab.throwUnsupportedSyntax
 
-syntax (&"solver" " := " Hammer.solverOption) : Hammer.configOption
 syntax (&"solverTimeout" " := " numLit) : Hammer.configOption
+syntax (&"wallclockTimeout" " := " numLit) : Hammer.configOption
 syntax (&"preprocessing" " := " Hammer.preprocessing) : Hammer.configOption
 syntax (&"disableAuto" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"disableAesop" " := " Hammer.bool_lit) : Hammer.configOption
+syntax (&"disableGrind" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"autoPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `auto` (default: 16)
 syntax (&"aesopPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `aesop` (default: 32)
+syntax (&"grindPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `grind` (default: 32)
 syntax (&"aesopPremisePriority" " := " numLit) : Hammer.configOption -- The priority of premises sent to `aesop` (default: 20)
 syntax (&"aesopAutoPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `auto` within `aesop` (default: 10)
+syntax (&"aesopGrindPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `grind` within `aesop` (default: 5)
+syntax (&"parallelism" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to use parallelism (default: true)
+syntax (&"outputAllSuggestions" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to show the user all suggestions or just the first one (default: false)
 
 structure ConfigurationOptions where
-  solver : Solver
   solverTimeout : Nat
+  wallclockTimeout : Nat
   preprocessing : Preprocessing
   disableAuto : Bool
   disableAesop : Bool
+  disableGrind : Bool
   aesopPremisePriority : Nat
   aesopAutoPriority : Nat
+  aesopGrindPriority : Nat
   autoPremises : Nat -- The number of premises sent to `auto` (default: 16)
   aesopPremises : Nat -- The number of premises sent to `aesop` (default: 32)
+  grindPremises : Nat -- The number of premises sent to `grind` (default: 32)
+  parallelism : Bool -- Whether to use parallelism (default: true)
+  outputAllSuggestions : Bool -- Whether to show the user all suggestions or just the first one (default: false)
 deriving ToExpr
 
 syntax hammerStar := "*"
@@ -204,41 +236,59 @@ macro_rules | `(tactic| hammerCore [$simpLemmas,*] [$facts,*]) => `(tactic| hamm
 
 /-- Checks to ensure that the set of given `configOptions` is usable. -/
 def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM ConfigurationOptions := do
-  if configOptions.disableAesop && configOptions.disableAuto then
-    throwError "Erroneous invocation of hammer: The aesop and auto options cannot both be disabled"
+  if configOptions.wallclockTimeout > 0 && configOptions.wallclockTimeout < configOptions.solverTimeout then
+    throwError "Erroneous invocation of hammer: The wallclockTimeout must be greater than or equal to the solverTimeout"
+  if !configOptions.parallelism && configOptions.outputAllSuggestions then
+    throwError "Erroneous invocation of hammer: The outputAllSuggestions option can only be enabled when parallelism is enabled"
+  if configOptions.disableAesop && configOptions.disableAuto && configOptions.disableGrind then
+    throwError "Erroneous invocation of hammer: The aesop, auto, and grind options cannot all be disabled"
   if configOptions.disableAesop && configOptions.preprocessing == Preprocessing.aesop then
     throwError "Erroneous invocation of hammer: Preprocessing cannot be set to aesop when aesop is disabled"
   if !configOptions.disableAesop && configOptions.preprocessing != Preprocessing.aesop then
     throwError "Erroneous invocation of hammer: Preprocessing must be set to aesop when aesop is enabled"
-  if !configOptions.disableAuto && configOptions.solver == Solver.zipperposition_exe then
-    try
-      let _ ← Auto.Solver.TPTP.getZipperpositionExePath -- This throws an error if the executable can't be found
-    catch _ =>
-      if configOptions.disableAesop then
-        throwError "The bundled zipperposition executable could not be found. To retrieve it, run `lake update Hammer`."
-      else
-        logWarning "The bundled zipperposition executable could not be found. To retrieve it, run `lake update Hammer`. Continuing with auto disabled..."
+  if !configOptions.disableAuto then
+    let useDefault := auto.tptp.zipperposition.useDefault.get (← getOptions)
+    let defaultPath ← Auto.Solver.TPTP.zipperpositionDefaultPath
+    let err := (
+        s!"Cannot find automatically downloaded Zipperposition executable. " ++
+        s!"Try running \"lake build\" at the root directory of this project " ++
+        s!"to see if \"zipperposition.exe\" pops up in {defaultPath}. Alternatively, " ++
+        s!"you can link LeanHammer to your own installation of Zipperposition by setting " ++
+        s!"\"auto.tptp.zipperposition.useDefault\" to false and setting " ++
+        s!"\"auto.tptp.zipperposition.customPath\" to your own Zipperposition executable."
+      )
+    if useDefault && !(← defaultPath.pathExists) then
+      -- Log a warning and then continue with auto disabled if possible. Otherwise, just throw an error.
+      if !configOptions.disableAesop || !configOptions.disableGrind then
+        logWarning $ err ++ " Continuing with auto disabled..."
         return {configOptions with disableAuto := true}
+      else
+        throwError err
   return configOptions
 
 def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : TacticM ConfigurationOptions := do
-  let mut solverOpt := none
   let mut solverTimeoutOpt := none
+  let mut wallclockTimeoutOpt := none
   let mut preprocessingOpt := none
   let mut disableAutoOpt := none
   let mut disableAesopOpt := none
+  let mut disableGrindOpt := none
   let mut autoPremisesOpt := none
   let mut aesopPremisesOpt := none
+  let mut grindPremisesOpt := none
   let mut aesopPremisePriorityOpt := none
   let mut aesopAutoPriorityOpt := none
+  let mut aesopGrindPriorityOpt := none
+  let mut parallelismOpt := none
+  let mut outputAllSuggestionsOpt := none
   for configOptionStx in configOptionsStx do
     match configOptionStx with
-    | `(Hammer.configOption| solver := $solverName:Hammer.solverOption) =>
-      if solverOpt.isNone then solverOpt ← elabSolverOption solverName
-      else throwError "Erroneous invocation of hammer: The solver option has been specified multiple times"
     | `(Hammer.configOption| solverTimeout := $userSolverTimeout:num) =>
       if solverTimeoutOpt.isNone then solverTimeoutOpt := some (TSyntax.getNat userSolverTimeout)
       else throwError "Erroneous invocation of hammer: The solverTimeout option has been specified multiple times"
+    | `(Hammer.configOption| wallclockTimeout := $userWallclockTimeout:num) =>
+      if wallclockTimeoutOpt.isNone then wallclockTimeoutOpt := some (TSyntax.getNat userWallclockTimeout)
+      else throwError "Erroneous invocation of hammer: The wallclockTimeout option has been specified multiple times"
     | `(Hammer.configOption| preprocessing := $preprocessing:Hammer.preprocessing) =>
       if preprocessingOpt.isNone then preprocessingOpt ← elabPreprocessing preprocessing
       else throwError "Erroneous invocation of hammer: The preprocessing option has been specified multiple times"
@@ -248,28 +298,43 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| disableAesop := $disableAesopBoolLit:Hammer.bool_lit) =>
       if disableAesopOpt.isNone then disableAesopOpt := some $ ← elabBoolLit disableAesopBoolLit
       else throwError "Erroneous invocation of hammer: The disableAesop option has been specified multiple times"
+    | `(Hammer.configOption| disableGrind := $disableGrindBoolLit:Hammer.bool_lit) =>
+      if disableGrindOpt.isNone then disableGrindOpt := some $ ← elabBoolLit disableGrindBoolLit
+      else throwError "Erroneous invocation of hammer: The disableGrind option has been specified multiple times"
     | `(Hammer.configOption| autoPremises := $userAutoPremises:num) =>
       if autoPremisesOpt.isNone then autoPremisesOpt := some (TSyntax.getNat userAutoPremises)
       else throwError "Erroneous invocation of hammer: The autoPremises option has been specified multiple times"
     | `(Hammer.configOption| aesopPremises := $userAesopPremises:num) =>
       if aesopPremisesOpt.isNone then aesopPremisesOpt := some (TSyntax.getNat userAesopPremises)
       else throwError "Erroneous invocation of hammer: The aesopPremises option has been specified multiple times"
+    | `(Hammer.configOption| grindPremises := $userGrindPremises:num) =>
+      if grindPremisesOpt.isNone then grindPremisesOpt := some (TSyntax.getNat userGrindPremises)
+      else throwError "Erroneous invocation of hammer: The grindPremises option has been specified multiple times"
     | `(Hammer.configOption| aesopPremisePriority := $userAesopPremisePriority:num) =>
       if aesopPremisePriorityOpt.isNone then aesopPremisePriorityOpt := some (TSyntax.getNat userAesopPremisePriority)
       else throwError "Erroneous invocation of hammer: The aesopPremisePriority option has been specified multiple times"
     | `(Hammer.configOption| aesopAutoPriority := $userAesopAutoPriority:num) =>
       if aesopAutoPriorityOpt.isNone then aesopAutoPriorityOpt := some (TSyntax.getNat userAesopAutoPriority)
       else throwError "Erroneous invocation of hammer: The aesopAutoPriority option has been specified multiple times"
+    | `(Hammer.configOption| aesopGrindPriority := $userAesopGrindPriority:num) =>
+      if aesopGrindPriorityOpt.isNone then aesopGrindPriorityOpt := some (TSyntax.getNat userAesopGrindPriority)
+      else throwError "Erroneous invocation of hammer: The aesopGrindPriority option has been specified multiple times"
+    | `(Hammer.configOption| parallelism := $parallelismBoolLit:Hammer.bool_lit) =>
+      if parallelismOpt.isNone then parallelismOpt := some $ ← elabBoolLit parallelismBoolLit
+      else throwError "Erroneous invocation of hammer: The parallelism option has been specified multiple times"
+    | `(Hammer.configOption| outputAllSuggestions := $outputAllSuggestionsBoolLit:Hammer.bool_lit) =>
+      if outputAllSuggestionsOpt.isNone then outputAllSuggestionsOpt := some $ ← elabBoolLit outputAllSuggestionsBoolLit
+      else throwError "Erroneous invocation of hammer: The outputAllSuggestions option has been specified multiple times"
     | _ => throwUnsupportedSyntax
   -- Set default values for options that were not specified
-  let solver ← -- **TODO** Will likely need to refactor/rethink `solver` option when incorporating lean-smt
-    match solverOpt with
-    | none => elabSolverOptionDefault
-    | some solver => pure solver
   let solverTimeout ←
     match solverTimeoutOpt with
     | none => getHammerSolverTimeoutDefaultM
     | some solverTimeout => pure solverTimeout
+  let wallclockTimeout ←
+    match wallclockTimeoutOpt with
+    | none => getHammerWallclockTimeoutDefaultM
+    | some wallclockTimeout => pure wallclockTimeout
   let disableAuto ←
     match disableAutoOpt with
     | none => getDisableAutoDefaultM
@@ -278,6 +343,10 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match disableAesopOpt with
     | none => getDisableAesopDefaultM
     | some disableAesop => pure disableAesop
+  let disableGrind ←
+    match disableGrindOpt with
+    | none => getDisableGrindDefaultM
+    | some disableGrind => pure disableGrind
   let preprocessing ←
     match preprocessingOpt with
     | none =>
@@ -292,6 +361,10 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match aesopPremisesOpt with
     | none => getAesopPremisesDefaultM
     | some aesopPremises => pure aesopPremises
+  let grindPremises ←
+    match grindPremisesOpt with
+    | none => getGrindPremisesDefaultM
+    | some grindPremises => pure grindPremises
   let aesopPremisePriority ←
     match aesopPremisePriorityOpt with
     | none => getAesopPremisePriorityDefaultM
@@ -300,37 +373,39 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     match aesopAutoPriorityOpt with
     | none => getAesopAutoPriorityDefaultM
     | some aesopAutoPriority => pure aesopAutoPriority
-  let configOptions :=
-    {solver := solver, solverTimeout := solverTimeout, preprocessing := preprocessing, disableAuto := disableAuto, disableAesop := disableAesop, autoPremises := autoPremises,
-     aesopPremises := aesopPremises, aesopPremisePriority := aesopPremisePriority, aesopAutoPriority := aesopAutoPriority}
+  let aesopGrindPriority ←
+    match aesopGrindPriorityOpt with
+    | none => getAesopGrindPriorityDefaultM
+    | some aesopGrindPriority => pure aesopGrindPriority
+  let parallelism ←
+    match parallelismOpt with
+    | none => getParallelismDefaultM
+    | some parallelism => pure parallelism
+  let outputAllSuggestions ←
+    match outputAllSuggestionsOpt with
+    | none => getOutputAllSuggestionsDefaultM
+    | some outputAllSuggestions => pure outputAllSuggestions
+  let configOptions := {
+    solverTimeout := solverTimeout, wallclockTimeout := wallclockTimeout, preprocessing := preprocessing,
+    disableAuto := disableAuto, disableGrind := disableGrind, disableAesop := disableAesop, autoPremises := autoPremises,
+    aesopPremises := aesopPremises, grindPremises := grindPremises, aesopPremisePriority := aesopPremisePriority,
+    aesopAutoPriority := aesopAutoPriority, aesopGrindPriority := aesopGrindPriority, parallelism := parallelism,
+    outputAllSuggestions := outputAllSuggestions
+  }
   let configOptions ← validateConfigOptions configOptions
   return configOptions
 
 def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (configOptions : ConfigurationOptions) (x : m α) : m α :=
-  match configOptions.solver with
-  | zipperposition_exe =>
-    withOptions
-      (fun o =>
-        let o := o.set `auto.tptp true
-        let o := o.set `auto.tptp.timeout configOptions.solverTimeout
-        let o := o.set `auto.smt false
-        let o := o.set `auto.tptp.premiseSelection true
-        let o := o.set `auto.tptp.solver.name "zipperposition_exe"
-        let o := o.set `auto.mono.ignoreNonQuasiHigherOrder true
-        o.set `auto.native true
-      ) x
-  | zipperposition =>
-    withOptions
-      (fun o =>
-        let o := o.set `auto.tptp true
-        let o := o.set `auto.tptp.timeout configOptions.solverTimeout
-        let o := o.set `auto.smt false
-        let o := o.set `auto.tptp.premiseSelection true
-        let o := o.set `auto.tptp.solver.name "zipperposition"
-        let o := o.set `auto.mono.ignoreNonQuasiHigherOrder true
-        o.set `auto.native true
-      ) x
-  | cvc5 => throwError "cvc5 hammer support not implemented yet"
+  withOptions
+    (fun o =>
+      let o := o.set `auto.tptp true
+      let o := o.set `auto.tptp.timeout configOptions.solverTimeout
+      let o := o.set `auto.smt false
+      let o := o.set `auto.tptp.premiseSelection true
+      let o := o.set `auto.tptp.solver.name "zipperposition"
+      let o := o.set `auto.mono.ignoreNonQuasiHigherOrder true
+      o.set `auto.native true
+    ) x
 
 def withDuperOptions [Monad m] [MonadError m] [MonadWithOptions m] (x : m α) : m α :=
   withOptions

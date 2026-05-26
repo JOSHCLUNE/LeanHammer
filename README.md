@@ -2,36 +2,38 @@
 
 LeanHammer is an automated reasoning tool for Lean that brings together multiple proof search and reconstruction techniques and combines them into one tool. The `hammer` tactic provided by LeanHammer uses a variety of techniques to search for a proof of the current goal, then constructs a suggestion for a tactic script which can replace the `hammer` invocation.
 
-LeanHammer is in an early stage of its development and is therefore subject to breaking changes. There are currently versions of the hammer that are compatible with the stable versions of Lean from `v4.20.0` through `v4.29.0` (and the corresponding versions of Mathlib).
+LeanHammer is in an early stage of its development and is therefore subject to breaking changes. There are currently versions of the hammer that are compatible with the stable versions of Lean from `v4.20.0` through `v4.30.0` (and the corresponding versions of Mathlib).
+
+***Note:** Although the LeanHammer repository has been updated to support `v4.30.0`, the LeanPremise server which LeanHammer uses for premise selection is still being updated from `v4.29.0` to `v4.30.0`. During the intermediate period while this update is occurring, premise selection may be slower and less accurate than usual. This note will be removed once the server has been fully updated to `v4.30.0`.*
 
 Pull requests and issues are welcome.
 
 ## Adding LeanHammer to Your Project
 
-To add LeanHammer for `v4.29.0` to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
+To add LeanHammer for `v4.30.0` to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
 
 ```toml
 [[require]]
 name = "Hammer"
 git = "https://github.com/JOSHCLUNE/LeanHammer"
-rev = "v4.29.0"
+rev = "main" # Replace this with `rev = "v4.XX.X"` to add LeanHammer for an earlier supported Lean version.
 
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.29.0"
+rev = "v4.30.0"
 ```
 The file `lean-toolchain` should contain the following:
 ```
-leanprover/lean4:v4.29.0
+leanprover/lean4:v4.30.0
 ```
 
 If you have a project with a `lakefile.lean` instead of `lakefile.toml`, you can use this instead:
 
 ```lean
-require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "v4.29.0"
+require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "main"
 
-require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.29.0"
+require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.30.0"
 ```
 
 Then use `lake update` to fetch the hammer and the corresponding versions of Lean and Mathlib. This also retrieves the Zipperposition executable that comes with LeanHammer. (This executable will be stored in the existing project's `.lake` directory.) The following example should then compile without any warnings or errors:
@@ -67,15 +69,16 @@ Currently, LeanHammer consists of/depends on the following components:
 
 - **Premise selection**
   - A [cloud-based premise selector](https://github.com/hanwenzhu/premise-selection) developed specifically for LeanHammer
-  - [MePo](https://www.sciencedirect.com/science/article/pii/S1570868307000626) which has been widely used in Isabelle's Sledgehammer and was implemented in Lean by Kim Morrison
+  - A [Sine Qua Non premise selector](https://dl.acm.org/doi/10.5555/2032266.2032289) which was implemented in Lean by Kim Morrison
 - **Translation procedure**
   - [Lean-auto](https://github.com/leanprover-community/lean-auto) which serves as an interface to translate from Lean into TPTP and SMT
 - **Automatic theorem provers**
-  - [Zipperposition](https://github.com/sneeuwballen/zipperposition) which is retrieved automatically via [this post_update script](https://github.com/leanprover-community/lean-auto/blob/hammer/lakefile.lean#L53)
+  - [Zipperposition](https://github.com/sneeuwballen/zipperposition) via [Lean-auto](https://github.com/leanprover-community/lean-auto/blob/hammer/lakefile.lean)
   - [cvc5](https://github.com/cvc5/cvc5) via the [Lean cvc5 FFI](https://github.com/abdoo8080/lean-cvc5) (Not yet integrated)
 - **Proof search and proof reconstruction tools native to Lean**
   - [Aesop](https://github.com/leanprover-community/aesop)
   - [Duper](https://github.com/leanprover-community/duper)
+  - [Grind](https://lean-lang.org/doc/reference/latest/The--grind--tactic/)
   - [Lean-SMT](https://github.com/ufmg-smite/lean-smt/tree/main) (Not yet integrated)
 
 The above list only consists of components that LeanHammer currently consists of/depends on. As additional components are added and integrated, they will be added to the above list.
@@ -92,12 +95,16 @@ Each of the `options` supplied to `hammer` have the form `option := value` and a
 
 - `disableAesop`: Can be set to `true` or `false` (default `false`). This option is used to remove Aesop from the LeanHammer call.
 - `disableAuto`: Can be set to `true` or `false` (default `false`). This option is used to remove Lean-auto, Zipperposition, and Duper from the LeanHammer call (each of these tools are part of a single pipeline)
+- `disableGrind`: Can be set to `true` or `false` (default `false`). This option is used to remove Grind from the LeanHammer call.
 - `preprocessing`: Can be set to `aesop`, `simp_target`, `simp_all`, or `no_preprocessing` (default `aesop`). This option determines whether the initial goal is first processed by `aesop`, `simp`, `simp_all`, or none of these. This option can only be set to a value other than `aesop` if `disableAesop` is set to `true`, and must be set to `aesop` if `disableAesop` is set to `false`.
 - `aesopPremises`: Can be set to any Nat (default 32). This option determines the number of lemmas from premise selection that are passed to Aesop as unsafe rules.
-- `autoPremises`: Can be set to any Nat (default 16). This option determines the number of lemmas from premises selection that are passed to Lean-auto, Zipperposition, and Duper.
+- `autoPremises`: Can be set to any Nat (default 16). This option determines the number of lemmas from premise selection that are passed to Lean-auto, Zipperposition, and Duper.
+- `grindPremises`: Can be set to any Nat (default 32). This option determines the number of lemmas from premise selection that are passed to Grind.
 - `aesopPremisePriority`: Can be set to any Nat between 0 and 100 (default 20). This option determines the Aesop success priority assigned to each of the lemmas from premise selection when passed to Aesop as unsafe rules. See [Aesop's README](https://github.com/leanprover-community/aesop) for additional details on the meaning of this success priority.
 - `aesopAutoPriority`: Can be set to any Nat between 0 and 100 (default 10). This option determines the Aesop success priority assigned to the unsafe rule that attempts to use Lean-auto, Zipperposition, and Duper to solve the current goal.
-- `solver`: Can be set to `zipperposition_exe` or `zipperposition` (default `zipperposition_exe`). This option determines the external automatic theorem prover that Lean-auto sends its translated problem to. Currently, the only options are `zipperposition_exe` (which uses the Zipperposition executable that LeanHammer's post_update script retrieves) and `zipperposition` (which allows the user to use their own preinstalled version of Zipperposition).
+- `aesopGrindPriority`: Can be set to any Nat between 0 and 100 (default 5). This option determines the Aesop success priority assigned to the unsafe rule that attempts to use Grind to solve the current goal.
+- `parallelism`: Can be set to `true` or `false` (default `true`). This option determines whether LeanHammer creates multiple tasks to attempt to solve the goal via different approaches.
+- `outputAllSuggestions`: Can be set to `true` or `false` (default `false`). This option determines whether LeanHammer shows the user all of the proofs it finds or if it only shows the user the first proof it finds. Note that enabling this option is likely to increase LeanHammer's average runtime, because when `outputAllSuggestions` is set to `false`, LeanHammer can determine as soon as any proof is found, even if other proofs might be found later with more time. This option can only be set to `true` if `parallelism` is also set to `true`.
 
 Each of these options' defaults can be changed with `set_option hammer.<option_name>Default <new default>`. For example, the command that changes the default number of premises passed to Lean-auto from 16 to 32 is `set_option hammer.autoPremisesDefault 32`.
 
@@ -105,8 +112,8 @@ Each of these options' defaults can be changed with `set_option hammer.<option_n
 
 You can use:
 - `hammer` to run the full pipeline
-- `hammer {disableAuto := true}` to try Aesop with premise selection
-- `hammer {disableAesop := true, preprocessing := no_preprocessing}` to try Zipperposition and Duper with premise selection
+- `hammer {disableAuto := true}` to try Aesop and Grind with premise selection
+- `hammer {disableAesop := true, disableGrind := true, preprocessing := no_preprocessing}` to try Zipperposition and Duper with premise selection
 
 ### Premise Selection
 
