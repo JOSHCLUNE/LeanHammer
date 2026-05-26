@@ -14,7 +14,10 @@ open Lean Meta Elab Tactic HammerCore Syntax LibrarySuggestions Duper Aesop Qq U
 
 syntax (name := hammer) "hammer" (ppSpace "[" (term),* "]")? (ppSpace "{"Hammer.configOption,*,?"}")? : tactic
 
-set_library_suggestions open Lean.LibrarySuggestions in Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
+-- Temporarily disabling Cloud.premiseSelector until the server is updated to v4.30.0
+-- **TODO** Revert this and the definition of `defaultSelector` in `evalHammerWithArgs` once the server is updated to v4.30.0
+-- set_library_suggestions open Lean.LibrarySuggestions in Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
+set_library_suggestions open Lean.LibrarySuggestions in sineQuaNonSelector.intersperse currentFile
 
 /-- This functions produces one Aesop call where Aesop is given:
     - unsafe rules corresponding to individual premise applications (these are determined by `addIdentStxs`).
@@ -218,7 +221,11 @@ def evalHammerWithArgs : Tactic
      `set_library_suggestions`. However, a comment in Lean.LibrarySuggestions.Basic (line 392 of v4.26.0) indicates that the registration
      mechanism is likely to change in the future, and if this occurs, I may need to adjust accordingly to preserve LeanHammer's intended behavior. -/
   let selector ← getSelector
-  let defaultSelector := Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
+
+  -- Temporarily disabling Cloud.premiseSelector until the server is updated to v4.30.0 (**TODO** Revert this once the server is updated to v4.30.0)
+  -- let defaultSelector := Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
+  let defaultSelector := sineQuaNonSelector.intersperse currentFile
+
   let selector := selector.getD defaultSelector
   let premiseSelectionStart ← IO.monoMsNow
   let premises ←

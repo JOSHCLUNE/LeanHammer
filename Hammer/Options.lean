@@ -14,11 +14,6 @@ declare_syntax_cat Hammer.bool_lit (behavior := symbol)
 syntax "true" : Hammer.bool_lit
 syntax "false" : Hammer.bool_lit
 
-register_option hammer.solverDefault : String := {
-  defValue := "zipperposition_exe"
-  descr := "The default value of the solver option"
-}
-
 register_option hammer.solverTimeoutDefault : Nat := {
   defValue := 5
   descr := "The default timeout for the solver (in seconds)"
@@ -91,7 +86,6 @@ register_option hammer.outputAllSuggestionsDefault : Bool := {
 
 namespace HammerCore
 
-def getHammerSolverDefault (opts : Options) : String := hammer.solverDefault.get opts
 def getHammerSolverTimeoutDefault (opts : Options) : Nat := hammer.solverTimeoutDefault.get opts
 def getHammerWallclockTimeoutDefault (opts : Options) : Nat := hammer.wallclockTimeoutDefault.get opts
 def getPreprocessingDefault (opts : Options) : String := hammer.preprocessingDefault.get opts
@@ -106,10 +100,6 @@ def getAesopAutoPriorityDefault (opts : Options) : Nat := hammer.aesopAutoPriori
 def getAesopGrindPriorityDefault (opts : Options) : Nat := hammer.aesopGrindPriorityDefault.get opts
 def getParallelismDefault (opts : Options) : Bool := hammer.parallelismDefault.get opts
 def getOutputAllSuggestionsDefault (opts : Options) : Bool := hammer.outputAllSuggestionsDefault.get opts
-
-def getHammerSolverDefaultM : CoreM String := do
-  let opts ← getOptions
-  return getHammerSolverDefault opts
 
 def getHammerSolverTimeoutDefaultM : CoreM Nat := do
   let opts ← getOptions

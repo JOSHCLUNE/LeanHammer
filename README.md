@@ -2,36 +2,38 @@
 
 LeanHammer is an automated reasoning tool for Lean that brings together multiple proof search and reconstruction techniques and combines them into one tool. The `hammer` tactic provided by LeanHammer uses a variety of techniques to search for a proof of the current goal, then constructs a suggestion for a tactic script which can replace the `hammer` invocation.
 
-LeanHammer is in an early stage of its development and is therefore subject to breaking changes. There are currently versions of the hammer that are compatible with the stable versions of Lean from `v4.20.0` through `v4.29.0` (and the corresponding versions of Mathlib).
+LeanHammer is in an early stage of its development and is therefore subject to breaking changes. There are currently versions of the hammer that are compatible with the stable versions of Lean from `v4.20.0` through `v4.30.0` (and the corresponding versions of Mathlib).
+
+***Note:** Although the LeanHammer repository has been updated to support `v4.30.0`, the LeanPremise server which LeanHammer uses for premise selection is still being updated from `v4.29.0` to `v4.30.0`. During the intermediate period while this update is occurring, premise selection may be slower and less accurate than usual. This note will be removed once the server has been fully updated to `v4.30.0`.*
 
 Pull requests and issues are welcome.
 
 ## Adding LeanHammer to Your Project
 
-To add LeanHammer for `v4.29.0` to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
+To add LeanHammer for `v4.30.0` to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
 
 ```toml
 [[require]]
 name = "Hammer"
 git = "https://github.com/JOSHCLUNE/LeanHammer"
-rev = "v4.29.0"
+rev = "main" # Replace this with `rev = "v4.XX.X"` to add LeanHammer for an earlier supported Lean version.
 
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.29.0"
+rev = "v4.30.0"
 ```
 The file `lean-toolchain` should contain the following:
 ```
-leanprover/lean4:v4.29.0
+leanprover/lean4:v4.30.0
 ```
 
 If you have a project with a `lakefile.lean` instead of `lakefile.toml`, you can use this instead:
 
 ```lean
-require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "v4.29.0"
+require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "main"
 
-require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.29.0"
+require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.30.0"
 ```
 
 Then use `lake update` to fetch the hammer and the corresponding versions of Lean and Mathlib. This also retrieves the Zipperposition executable that comes with LeanHammer. (This executable will be stored in the existing project's `.lake` directory.) The following example should then compile without any warnings or errors:
@@ -71,7 +73,7 @@ Currently, LeanHammer consists of/depends on the following components:
 - **Translation procedure**
   - [Lean-auto](https://github.com/leanprover-community/lean-auto) which serves as an interface to translate from Lean into TPTP and SMT
 - **Automatic theorem provers**
-  - [Zipperposition](https://github.com/sneeuwballen/zipperposition) which is retrieved automatically via [this post_update script](https://github.com/leanprover-community/lean-auto/blob/hammer/lakefile.lean#L53)
+  - [Zipperposition](https://github.com/sneeuwballen/zipperposition) via [Lean-auto](https://github.com/leanprover-community/lean-auto/blob/hammer/lakefile.lean)
   - [cvc5](https://github.com/cvc5/cvc5) via the [Lean cvc5 FFI](https://github.com/abdoo8080/lean-cvc5) (Not yet integrated)
 - **Proof search and proof reconstruction tools native to Lean**
   - [Aesop](https://github.com/leanprover-community/aesop)
@@ -91,7 +93,6 @@ The syntax for invoking the `hammer` tactic is `by hammer [lemmas] {options}`. T
 
 Each of the `options` supplied to `hammer` have the form `option := value` and are separated by commas. Options that can be used to customize a LeanHammer call include:
 
-- `wallclockTimeout`: Can be set to any Nat (default 5). This option determines the number of (wallclock) seconds LeanHammer will run before giving up and canceling any processes it spawned. If `wallclockTimeout` is set to 0, then LeanHammer will run until a `maxHeartbeats` limit is reached.
 - `disableAesop`: Can be set to `true` or `false` (default `false`). This option is used to remove Aesop from the LeanHammer call.
 - `disableAuto`: Can be set to `true` or `false` (default `false`). This option is used to remove Lean-auto, Zipperposition, and Duper from the LeanHammer call (each of these tools are part of a single pipeline)
 - `disableGrind`: Can be set to `true` or `false` (default `false`). This option is used to remove Grind from the LeanHammer call.
@@ -102,7 +103,6 @@ Each of the `options` supplied to `hammer` have the form `option := value` and a
 - `aesopPremisePriority`: Can be set to any Nat between 0 and 100 (default 20). This option determines the Aesop success priority assigned to each of the lemmas from premise selection when passed to Aesop as unsafe rules. See [Aesop's README](https://github.com/leanprover-community/aesop) for additional details on the meaning of this success priority.
 - `aesopAutoPriority`: Can be set to any Nat between 0 and 100 (default 10). This option determines the Aesop success priority assigned to the unsafe rule that attempts to use Lean-auto, Zipperposition, and Duper to solve the current goal.
 - `aesopGrindPriority`: Can be set to any Nat between 0 and 100 (default 5). This option determines the Aesop success priority assigned to the unsafe rule that attempts to use Grind to solve the current goal.
-- `solverTimeout`: Can be set to any Nat (default 5). This option determines the wallclock timeout (in seconds) passed to the external solver. If `solverTimeout` is set to 0, then the external solver will not be used.
 - `parallelism`: Can be set to `true` or `false` (default `true`). This option determines whether LeanHammer creates multiple tasks to attempt to solve the goal via different approaches.
 - `outputAllSuggestions`: Can be set to `true` or `false` (default `false`). This option determines whether LeanHammer shows the user all of the proofs it finds or if it only shows the user the first proof it finds. Note that enabling this option is likely to increase LeanHammer's average runtime, because when `outputAllSuggestions` is set to `false`, LeanHammer can determine as soon as any proof is found, even if other proofs might be found later with more time. This option can only be set to `true` if `parallelism` is also set to `true`.
 
