@@ -3,8 +3,6 @@ import Auto
 
 open Lean Parser Elab Tactic
 
--- An option to specify the external prover that `hammer` uses
-declare_syntax_cat Hammer.solverOption (behavior := symbol)
 -- An option to specify the preprocessing that `hammer` uses
 declare_syntax_cat Hammer.preprocessing (behavior := symbol)
 -- An option to specify other configuration options for `hammer`
@@ -157,9 +155,6 @@ def getOutputAllSuggestionsDefaultM : CoreM Bool := do
   let opts ← getOptions
   return getOutputAllSuggestionsDefault opts
 
-syntax "zipperposition" : Hammer.solverOption
-syntax "cvc5" : Hammer.solverOption
-
 syntax "simp_target" : Hammer.preprocessing -- Corresponds to `simp`
 syntax "simp_all" : Hammer.preprocessing -- Corresponds to `simp_all`
 syntax "no_preprocessing" : Hammer.preprocessing -- Corresponds to skipping all preprocessing
@@ -199,7 +194,6 @@ def elabBoolLit [Monad m] [MonadError m] (stx : TSyntax `Hammer.bool_lit) : m Bo
     | `(bool_lit| false) => return false
     | _ => Elab.throwUnsupportedSyntax
 
-syntax (&"solver" " := " Hammer.solverOption) : Hammer.configOption
 syntax (&"solverTimeout" " := " numLit) : Hammer.configOption
 syntax (&"wallclockTimeout" " := " numLit) : Hammer.configOption
 syntax (&"preprocessing" " := " Hammer.preprocessing) : Hammer.configOption
