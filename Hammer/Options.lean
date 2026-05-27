@@ -53,7 +53,7 @@ register_option hammer.aesopPremisesDefault : Nat := {
 }
 
 register_option hammer.grindPremisesDefault : Nat := {
-  defValue := 32
+  defValue := 100
   descr := "The default number of premises sent to grind"
 }
 
