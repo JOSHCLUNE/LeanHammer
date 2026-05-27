@@ -8,6 +8,11 @@ initialize
   Lean.registerTraceClass `hammer.premises
   Lean.registerTraceClass `hammer.profiling
 
+register_option hammer.singleTacticParallel : Bool := {
+  defValue := false
+  descr := "A temporary option to test the impact of using tryAllTacsOnGoal"
+}
+
 namespace Hammer
 
 open Lean Meta Elab Tactic HammerCore Syntax LibrarySuggestions Duper Aesop Qq Util
@@ -159,9 +164,27 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
     trace[hammer.profiling] "Premise filtering took {(← IO.monoMsNow) - premiseFilteringStart}ms"
     if configOptions.parallelism then
       match configOptions.disableAesop, configOptions.disableAuto, configOptions.disableGrind with
-      | true, true, false => runSingularTactic (evalTactic (← `(tactic| grind? [$grindParamStxs,*])))
-      | true, false, true => runSingularTactic (runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions)
-      | false, true, true => runSingularTactic (runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions)
+      | true, true, false =>
+        if hammer.singleTacticParallel.get (← getOptions) then
+          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
+            evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
+          ]
+        else
+          runSingularTactic (evalTactic (← `(tactic| grind? [$grindParamStxs,*])))
+      | true, false, true =>
+        if hammer.singleTacticParallel.get (← getOptions) then
+          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
+            runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
+          ]
+        else
+          runSingularTactic (runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions)
+      | false, true, true =>
+        if hammer.singleTacticParallel.get (← getOptions) then
+          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
+            runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions
+          ]
+        else
+          runSingularTactic (runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions)
       | false, false, true =>
         tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
           runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions,
@@ -189,9 +212,27 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       | true, true, true => throwError "Erroneous invocation of hammer: At least one of Aesop, Auto, and Grind must be enabled."
     else
       match configOptions.disableAesop, configOptions.disableAuto, configOptions.disableGrind with
-      | true, true, false => runSingularTactic (evalTactic (← `(tactic| grind? [$grindParamStxs,*])))
-      | true, false, true => runSingularTactic (runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions)
-      | false, _, _ => runSingularTactic (runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions)
+      | true, true, false =>
+        if hammer.singleTacticParallel.get (← getOptions) then
+          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
+            evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
+          ]
+        else
+          runSingularTactic (evalTactic (← `(tactic| grind? [$grindParamStxs,*])))
+      | true, false, true =>
+        if hammer.singleTacticParallel.get (← getOptions) then
+          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
+            runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions
+          ]
+        else
+          runSingularTactic (runHammerCore stxRef simpLemmas autoPremises includeLCtx configOptions)
+      | false, _, _ =>
+        if hammer.singleTacticParallel.get (← getOptions) then
+          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
+            runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions
+          ]
+        else
+          runSingularTactic (runAesopWithSubprocedures autoPremises addIdentStxs grindPremiseNames includeLCtx configOptions)
       | true, false, false => throwError "Erroneous invocation of hammer: Aesop or parallelism is needed to enable both Auto and Grind."
       | true, true, true => throwError "Erroneous invocation of hammer: At least one of Aesop, Auto, and Grind must be enabled."
 
