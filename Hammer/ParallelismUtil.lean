@@ -103,12 +103,20 @@ def wrapTactic {α : Type} (tactic : α → TacticM Unit) (cancelTk? : Option IO
       Term.withoutModifyingElabMetaStateWithInfo do
         let preCount := (← Core.getMessageLog).reportedPlusUnreported.size
         let ngoals ← Term.withSynthesize (postpone := .no) do
-          Tactic.run mvar.mvarId! (tactic x)
+          Tactic.run mvar.mvarId! $ do
+            taskEventsRef.modify (·.push s!"Task {taskIdx} Tactic.run call started at +{(← IO.monoMsNow) - buildParallelTacticsStart}ms")
+            tactic x
+            taskEventsRef.modify (·.push s!"Task {taskIdx} Tactic.run call ending at +{(← IO.monoMsNow) - buildParallelTacticsStart}ms")
         let tryThisDelta := coreMessageLogDelta preCount (← Core.getMessageLog)
         if ngoals.isEmpty then
           taskEventsRef.modify (·.push s!"Task {taskIdx} confirmed that all goals were resolved at +{(← IO.monoMsNow) - buildParallelTacticsStart}ms")
           let result ← instantiateMVars mvar
-          let result ← try inlineFreshProofs env0 result catch _ => return (none, tryThisDelta)
+          let result ←
+            try
+              inlineFreshProofs env0 result
+            catch _ =>
+              taskEventsRef.modify (·.push s!"Task {taskIdx} yielded a proof that couldn't be inlined at +{(← IO.monoMsNow) - buildParallelTacticsStart}ms")
+              return (none, tryThisDelta)
           if (← proofExprIncomplete result) then
             taskEventsRef.modify (·.push s!"Task {taskIdx} confirmed to yield an incomplete proof at +{(← IO.monoMsNow) - buildParallelTacticsStart}ms")
             return (none, tryThisDelta)
@@ -165,7 +173,7 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (wallclockT
   let mut taskIdx := 0
   for tac in tacs do
     let wrappedTac := (← wrapTactic (fun () => tac) cancelTk stxRef taskIdx buildParallelTacticsStart taskEventsRef) ()
-    let t ← BaseIO.asTask do
+    let t ← BaseIO.asTask (prio := Task.Priority.max) do
       let startMs ← IO.monoMsNow
       taskEventsRef.modify (·.push s!"Task {taskIdx} started at +{startMs - buildParallelTacticsStart}ms")
       let r ← wrappedTac
