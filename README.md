@@ -4,8 +4,6 @@ LeanHammer is an automated reasoning tool for Lean that brings together multiple
 
 LeanHammer is in an early stage of its development and is therefore subject to breaking changes. There are currently versions of the hammer that are compatible with the stable versions of Lean from `v4.20.0` through `v4.30.0` (and the corresponding versions of Mathlib).
 
-***Note:** Although the LeanHammer repository has been updated to support `v4.30.0`, the LeanPremise server which LeanHammer uses for premise selection is still being updated from `v4.29.0` to `v4.30.0`. During the intermediate period while this update is occurring, premise selection may be slower and less accurate than usual. This note will be removed once the server has been fully updated to `v4.30.0`.*
-
 Pull requests and issues are welcome.
 
 ## Adding LeanHammer to Your Project
@@ -103,7 +101,7 @@ Each of the `options` supplied to `hammer` have the form `option := value` and a
 - `aesopPremisePriority`: Can be set to any Nat between 0 and 100 (default 20). This option determines the Aesop success priority assigned to each of the lemmas from premise selection when passed to Aesop as unsafe rules. See [Aesop's README](https://github.com/leanprover-community/aesop) for additional details on the meaning of this success priority.
 - `aesopAutoPriority`: Can be set to any Nat between 0 and 100 (default 10). This option determines the Aesop success priority assigned to the unsafe rule that attempts to use Lean-auto, Zipperposition, and Duper to solve the current goal.
 - `aesopGrindPriority`: Can be set to any Nat between 0 and 100 (default 5). This option determines the Aesop success priority assigned to the unsafe rule that attempts to use Grind to solve the current goal.
-- `parallelism`: Can be set to `true` or `false` (default `false`). This option determines whether LeanHammer creates multiple tasks to attempt to solve the goal via different approaches. This feature can be used now, but is still in development and is disabled by default because it tends to increase LeanHammer's runtime significantly when LeanHammer is called with large environments (e.g. when all of Mathlib is imported).
+- `parallelism`: Can be set to `true` or `false` (default `false`). This option determines whether LeanHammer creates multiple tasks to attempt to solve the goal via different approaches. This feature can be used now, but is disabled by default because it tends to increase LeanHammer's runtime significantly when LeanHammer is called with large environments (e.g. when all of Mathlib is imported). This feature will be enabled by default once [this](https://github.com/leanprover/lean4/pull/13898) PR lands.
 - `outputAllSuggestions`: Can be set to `true` or `false` (default `false`). This option determines whether LeanHammer shows the user all of the proofs it finds or if it only shows the user the first proof it finds. Note that enabling this option is likely to increase LeanHammer's average runtime, because when `outputAllSuggestions` is set to `false`, LeanHammer can determine as soon as any proof is found, even if other proofs might be found later with more time. This option can only be set to `true` if `parallelism` is also set to `true`.
 
 Each of these options' defaults can be changed with `set_option hammer.<option_name>Default <new default>`. For example, the command that changes the default number of premises passed to Lean-auto from 16 to 32 is `set_option hammer.autoPremisesDefault 32`.
