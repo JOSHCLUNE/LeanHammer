@@ -6,7 +6,7 @@ defaultTargets = ["Hammer"]
 [[require]]
 name = "«premise-selection»"
 git = "https://github.com/hanwenzhu/premise-selection"
-rev = "fa74073353f71c065d9367da24b201e5752cedfe"
+rev = "ef91948b48bff0bf535e70bf5a96210aa8a96b22"
 
 [[require]]
 name = "Qq"
