@@ -87,7 +87,7 @@ def getAesopPremisesDefault (opts : Options) : Nat := hammer.aesopPremisesDefaul
 def getSmtPremisesDefault (opts : Options) : Nat := hammer.smtPremisesDefault.get opts
 def getAesopPremisePriorityDefault (opts : Options) : Nat := hammer.aesopPremisePriorityDefault.get opts
 def getAesopDuperPriorityDefault (opts : Options) : Nat := hammer.aesopDuperPriorityDefault.get opts
-def getSmtPriorityDefault (opts : Options) : Nat := hammer.smtPriorityDefault.get opts
+def getAesopSmtPriorityDefault (opts : Options) : Nat := hammer.smtPriorityDefault.get opts
 
 def getHammerSolverDefaultM : CoreM String := do
   let opts ← getOptions
@@ -133,9 +133,9 @@ def getAesopDuperPriorityDefaultM : CoreM Nat := do
   let opts ← getOptions
   return getAesopDuperPriorityDefault opts
 
-def getSmtPriorityDefaultM : CoreM Nat := do
+def getAesopSmtPriorityDefaultM : CoreM Nat := do
   let opts ← getOptions
-  return getSmtPriorityDefault opts
+  return getAesopSmtPriorityDefault opts
 
 syntax "zipperposition_exe" : Hammer.solverOption
 syntax "zipperposition" : Hammer.solverOption
@@ -358,7 +358,7 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | some aesopDuperPriority => pure aesopDuperPriority
   let aesopSmtPriority ←
     match aesopSmtPriorityOpt with
-    | none => getSmtPriorityDefaultM
+    | none => getAesopSmtPriorityDefaultM
     | some smtPriority => pure smtPriority
   let configOptions :=
     {solver := solver, solverTimeout := solverTimeout, preprocessing := preprocessing, disableDuper := disableDuper, disableAesop := disableAesop,
