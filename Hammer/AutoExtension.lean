@@ -20,6 +20,10 @@ def auto.getHints.getFailOnParseErrorM : CoreM Bool := do
 
 namespace Auto
 
+partial def DTr.collectLeafStrings : DTr → Array String
+  | .node _ dtrs => dtrs.foldl (fun acc l => acc ++ l.collectLeafStrings) #[]
+  | .leaf s => #[s]
+
 namespace Solver.SMT
 
 /-- `solverHints` includes:
@@ -51,7 +55,7 @@ def querySolverWithHints (query : Array IR.SMT.Command)
   let stdout ← solver.stdout.getLine
   trace[auto.smt.result] "checkSatResponse: {stdout}"
   -- **NOTE** When checkSatResponse is sat, the below getTerm call can throw an error
-  let (checkSatResponse, _) ← Auto.Solver.SMT.getTerm stdout
+  let (checkSatResponse, _) ← Auto.Solver.SMT.getSexp stdout
   match checkSatResponse with
   | .atom (.symb "sat") =>
     Auto.Solver.SMT.emitCommand solver .getModel
@@ -60,7 +64,7 @@ def querySolverWithHints (query : Array IR.SMT.Command)
     let stderr ← solver.stderr.readToEnd
     solver.kill
     try
-      let (model, _) ← Auto.Solver.SMT.getTerm stdout
+      let (model, _) ← Auto.Solver.SMT.getSexp stdout
       trace[auto.smt.result] "{name} says Sat"
       trace[auto.smt.model] "Model:\n{model}"
       trace[auto.smt.stderr] "stderr:\n{stderr}"
@@ -98,7 +102,7 @@ def querySolverWithHints (query : Array IR.SMT.Command)
     let [lastRewriteFact, stdout] := stdout.splitOn "\"Unsat core:\""
       | throwError "Error finding unsat core in output"
     let rewriteFacts := rewriteFacts.append [lastRewriteFact]
-    let (unsatCore, stdout) ← Auto.Solver.SMT.getTerm stdout
+    let (unsatCore, stdout) ← Auto.Solver.SMT.getSexp stdout
     let preprocessFacts ← Auto.Parser.SMTTerm.lexAllTerms preprocessFacts 0 []
     let theoryLemmas ← Auto.Parser.SMTTerm.lexAllTerms theoryLemmas 0 []
     let instantiations ← Auto.Parser.SMTTerm.lexAllTerms instantiations 0 []
