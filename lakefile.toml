@@ -1,16 +1,11 @@
 name = "Hammer"
-precompileModules = true
+precompileModules = false
 preferReleaseBuild = true
 defaultTargets = ["Hammer"]
 
 [[require]]
 name = "«premise-selection»"
 git = "https://github.com/hanwenzhu/premise-selection"
-rev = "v4.32.0-rc1"
-
-[[require]]
-name = "Qq"
-git = "https://github.com/leanprover-community/quote4.git"
 rev = "v4.32.0-rc1"
 
 [[require]]
@@ -22,6 +17,12 @@ rev = "v4.32.0-rc1"
 name = "«Duper»"
 git = "https://github.com/leanprover-community/duper.git"
 rev = "56b74b75388beb354953899833cdc240878e9eee"
+
+[[require]]
+name = "«Smt»"
+path = "../lean-smt-fork"
+# git = "https://github.com/ufmg-smite/lean-smt.git"
+# rev = "main"
 
 [[lean_lib]]
 name = "Hammer"
