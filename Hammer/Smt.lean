@@ -46,7 +46,9 @@ def smtPipeline (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.T
     let x ← `(Smt.Tactic.smtHintElem| $p:term)
     return x
   let cfg ← `(optConfig| +$(mkIdent `mono))
-  let hints ← `(Smt.Tactic.smtHints| [$premises,*])
+  let hints ←
+    if includeLCtx then `(Smt.Tactic.smtHints| [*, $premises,*])
+    else `(Smt.Tactic.smtHints| [$premises,*])
   trace[hammer.debug] "smt {cfg} {hints}"
   let coreUserInputFacts ← Smt.Tactic.evalSmtCore cfg hints
   let mut tacticsArr := preprocessingSuggestion -- The array of tactics that will be suggested to the user

@@ -61,15 +61,35 @@ def runAesopWithSubprocedures (duperPremises : Array Term) (addIdentStxs : TSynt
     let addGrindUnsafeRule ←
       `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopGrindPriority):num% tactic $grindRuleTacStx))
     -- Building `smtRuleTacStx`
-
-    -- **TODO** Build `smtRuleTacStx` and modify the below match statement to consider `configOptions.disableSmt`
-
+    let smtHints ← smtPremises.mapM (fun n => `(Smt.Tactic.smtHintElem| $n:term))
+    let (_, elabedSmtHints) ←
+      try
+        -- `Smt.Tactic.elabHints` can yield the error: "failed to elaborate eliminator, expected type is not available". Lean-SMT's internal
+        -- filter should handle this, but if it doesn't it is better to silently pass nothing to Lean-SMT than to throw an error.
+        Smt.Tactic.elabHints (← `(Smt.Tactic.smtHints| [$(smtHints),*]))
+      catch _ =>
+        trace[hammer.debug] "{decl_name%} :: Failed to elab smt hints: {smtHints}, passing zero hints to Lean-SMT"
+        pure ({}, #[])
+    let smtHintTypes ← elabedSmtHints.mapM (fun h => Meta.inferType h)
+    let smtHintTypesAndStx : List (Expr × Syntax) := List.zip smtHintTypes.toList $ smtPremises.toList.map (fun t => t.raw)
+    let smtRuleTacVal ← mkAppM `HammerCore.Smt.smtSingleRuleTac #[q($smtHintTypesAndStx), q($includeLCtx)]
+    let smtRuleTacDecl :=
+      mkDefinitionValEx `instantiatedSmtRuleTac [] ruleTacType smtRuleTacVal
+        ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedSmtRuleTac]
+    addAndCompile $ Declaration.defnDecl smtRuleTacDecl
+    let smtRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedSmtRuleTac)))
+    let addSmtUnsafeRule ←
+      `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopSmtPriority):num% tactic $smtRuleTacStx))
     -- Calling Aesop with the set of subprocedures determined by `configOptions`
-    match configOptions.disableDuper, configOptions.disableGrind with
-    | true, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
-    | true, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addGrindUnsafeRule))
-    | false, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule))
-    | false, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule $addGrindUnsafeRule))
+    match configOptions.disableDuper, configOptions.disableGrind, configOptions.disableSmt with
+    | true, true, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
+    | true, true, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addSmtUnsafeRule))
+    | true, false, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addGrindUnsafeRule))
+    | true, false, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addGrindUnsafeRule $addSmtUnsafeRule))
+    | false, true, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule))
+    | false, true, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule $addSmtUnsafeRule))
+    | false, false, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule $addGrindUnsafeRule))
+    | false, false, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule $addGrindUnsafeRule $addSmtUnsafeRule))
 
 /-- Runs `Meta.isProof` on `e` and every subterm of `e`. If `Meta.isProof` ever returns `true`,
     then `autoPremiseTypeEligibleAux` returns `false`.
@@ -177,80 +197,63 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
     if !configOptions.disableSmt then
       smtPremises ← smtPremises.filterM autoPremiseEligible -- Lean-SMT uses Lean-auto for preprocessing
     trace[hammer.profiling] "Premise filtering took {(← IO.monoMsNow) - premiseFilteringStart}ms"
-    -- **TODO** Modify below match statement to take into account `configOptions.disableSmt`
     if configOptions.parallelism then
-      match configOptions.disableAesop, configOptions.disableDuper, configOptions.disableGrind with
-      | true, true, false =>
+      -- Gather the tactics corresponding to the subprocedures enabled by `configOptions`. When Aesop is enabled
+      -- alongside at least one other subprocedure, an additional pure Aesop call (with all other subprocedures
+      -- disabled) is included.
+      let mut parallelTacs : List (TacticM Unit) := []
+      if !configOptions.disableAesop then
+        parallelTacs := parallelTacs ++ [runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions]
+        if !configOptions.disableDuper || !configOptions.disableGrind || !configOptions.disableSmt then
+          parallelTacs := parallelTacs ++
+            [runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx
+              {configOptions with disableDuper := true, disableGrind := true, disableSmt := true}]
+      if !configOptions.disableDuper then
+        parallelTacs := parallelTacs ++ [runDuper stxRef simpLemmas duperPremises includeLCtx configOptions]
+      if !configOptions.disableGrind then
+        parallelTacs := parallelTacs ++ [evalTactic (← `(tactic| grind? [$grindParamStxs,*]))]
+      if !configOptions.disableSmt then
+        parallelTacs := parallelTacs ++ [smtPipeline stxRef simpLemmas smtPremises includeLCtx configOptions]
+      match parallelTacs with
+      | [] => throwError "Erroneous invocation of hammer: At least one of Aesop, Duper, Grind, and Lean-SMT must be enabled."
+      | [singleTac] =>
         if hammer.singleTacticParallel.get (← getOptions) then
-          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
-            evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
-          ]
+          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [singleTac]
         else
-          runSingularTactic (evalTactic (← `(tactic| grind? [$grindParamStxs,*])))
-      | true, false, true =>
-        if hammer.singleTacticParallel.get (← getOptions) then
-          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
-            runDuper stxRef simpLemmas duperPremises includeLCtx configOptions
-          ]
-        else
-          runSingularTactic (runDuper stxRef simpLemmas duperPremises includeLCtx configOptions)
-      | false, true, true =>
-        if hammer.singleTacticParallel.get (← getOptions) then
-          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
-            runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions
-          ]
-        else
-          runSingularTactic (runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions)
-      | false, false, true =>
-        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
-          runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions,
-          runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx {configOptions with disableDuper := true, disableGrind := true},
-          runDuper stxRef simpLemmas duperPremises includeLCtx configOptions
-        ]
-      | false, true, false =>
-        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
-          runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions,
-          runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx {configOptions with disableDuper := true, disableGrind := true},
-          evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
-        ]
-      | false, false, false =>
-        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
-          runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions,
-          runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx {configOptions with disableDuper := true, disableGrind := true},
-          runDuper stxRef simpLemmas duperPremises includeLCtx configOptions,
-          evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
-        ]
-      | true, false, false =>
-        tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
-          runDuper stxRef simpLemmas duperPremises includeLCtx configOptions,
-          evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
-        ]
-      | true, true, true => throwError "Erroneous invocation of hammer: At least one of Aesop, Auto, and Grind must be enabled."
+          runSingularTactic singleTac
+      | multipleTacs => tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout multipleTacs
     else
-      match configOptions.disableAesop, configOptions.disableDuper, configOptions.disableGrind with
-      | true, true, false =>
+      match configOptions.disableAesop, configOptions.disableDuper, configOptions.disableGrind, configOptions.disableSmt with
+      | true, true, false, true =>
         if hammer.singleTacticParallel.get (← getOptions) then
           tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
             evalTactic (← `(tactic| grind? [$grindParamStxs,*]))
           ]
         else
           runSingularTactic (evalTactic (← `(tactic| grind? [$grindParamStxs,*])))
-      | true, false, true =>
+      | true, false, true, true =>
         if hammer.singleTacticParallel.get (← getOptions) then
           tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
             runDuper stxRef simpLemmas duperPremises includeLCtx configOptions
           ]
         else
           runSingularTactic (runDuper stxRef simpLemmas duperPremises includeLCtx configOptions)
-      | false, _, _ =>
+      | true, true, true, false =>
+        if hammer.singleTacticParallel.get (← getOptions) then
+          tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
+            smtPipeline stxRef simpLemmas smtPremises includeLCtx configOptions
+          ]
+        else
+          runSingularTactic (smtPipeline stxRef simpLemmas smtPremises includeLCtx configOptions)
+      | false, _, _, _ =>
         if hammer.singleTacticParallel.get (← getOptions) then
           tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
             runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions
           ]
         else
           runSingularTactic (runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions)
-      | true, false, false => throwError "Erroneous invocation of hammer: Aesop or parallelism is needed to enable both Auto and Grind."
-      | true, true, true => throwError "Erroneous invocation of hammer: At least one of Aesop, Auto, and Grind must be enabled."
+      | true, true, true, true => throwError "Erroneous invocation of hammer: At least one of Aesop, Duper, Grind, and Lean-SMT must be enabled."
+      | _, _, _, _ => throwError "Erroneous invocation of hammer: Aesop or parallelism is needed to enable more than one of Duper, Grind, and SMT."
 
 def evalHammerWithArgs : Tactic
 | `(tactic| hammer%$stxRef [$userInputTerms,*] {$configOptions,*}) => withoutModifyingEnv do

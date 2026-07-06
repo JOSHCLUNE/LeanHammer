@@ -175,15 +175,16 @@ def smtSingleRuleTac (ps : Premises) (includeLCtx : Bool) : SingleRuleTac := fun
     let names := unsat_core.map (fun e => let idx := hs.findIdx (fun z => .fvar z == e); ps[idx]!.2)
     let namesT ← names.mapM cast_stx
     let idents ← namesT.mapM (fun i => `(Smt.Tactic.smtHintElem| $i:term))
+    let cfg ← `(optConfig| +$(mkIdent `mono))
     let stx ←
       if includeLCtx && !unsat_core.isEmpty then
-        `(tactic| smt [*, $(idents),*])
+        `(tactic| smt $cfg [*, $(idents),*])
       else if includeLCtx && unsat_core.isEmpty then
-        `(tactic| smt [*])
+        `(tactic| smt $cfg [*])
       else if !includeLCtx && !unsat_core.isEmpty then
-        `(tactic| smt [$(idents),*])
+        `(tactic| smt $cfg [$(idents),*])
       else -- if !includeLCtx && unsat_core.isEmpty
-        `(tactic| smt)
+        `(tactic| smt $cfg)
     let tac := withoutRecover $ evalTactic stx
     let postGoals := (← Elab.Tactic.run input.goal tac |>.run').toArray
     let postState ← saveState
