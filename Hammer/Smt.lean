@@ -50,11 +50,26 @@ def smtPipeline (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.T
     if includeLCtx then `(Smt.Tactic.smtHints| [*, $premises,*])
     else `(Smt.Tactic.smtHints| [$premises,*])
   trace[hammer.debug] "smt {cfg} {hints}"
+  -- Capture the main goal's local context before `Smt.Tactic.evalSmtCore` closes the goal
+  let lctx ← withMainContext do getLCtx
   let coreUserInputFacts ← Smt.Tactic.evalSmtCore cfg hints
+  -- When `includeLCtx` is enabled, the suggestion uses `*`, so elements of the unsat core that are covered
+  -- by `*` (literal `*` elements and identifiers naming local hypotheses) must be filtered out, as naming
+  -- them alongside `*` would make the suggestion fail with "Auto does not accept duplicated input terms"
+  let coreUserInputFacts : Array (TSyntax `Smt.Tactic.smtHintElem) :=
+    if includeLCtx then
+      coreUserInputFacts.filter (fun hintElem =>
+        match hintElem with
+        | `(Smt.Tactic.smtHintElem| $t:term) => !(t.raw.isIdent && (lctx.findFromUserName? t.raw.getId).isSome)
+        | _ => true)
+    else
+      coreUserInputFacts
   let mut tacticsArr := preprocessingSuggestion -- The array of tactics that will be suggested to the user
-  -- We do not use `includeLCtx` to optionally add `*` to the hints passed to `smt` because `coreUserInputFacts`
-  -- includes local hypotheses in the unsat core and Lean-auto's preprocessing doesn't allow duplicate terms
-  if coreUserInputFacts.size > 0 then
+  if includeLCtx && coreUserInputFacts.size > 0 then
+    tacticsArr := tacticsArr.push $ ← `(tactic| smt $cfg [*, $(coreUserInputFacts),*])
+  else if includeLCtx && coreUserInputFacts.size == 0 then
+    tacticsArr := tacticsArr.push $ ← `(tactic| smt $cfg [*])
+  else if coreUserInputFacts.size > 0 then
     tacticsArr := tacticsArr.push $ ← `(tactic| smt $cfg [$(coreUserInputFacts),*])
   else
     tacticsArr := tacticsArr.push $ ← `(tactic| smt $cfg)
