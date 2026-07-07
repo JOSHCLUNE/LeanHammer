@@ -209,11 +209,17 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
             [runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx
               {configOptions with disableDuper := true, disableGrind := true, disableSmt := true}]
       if !configOptions.disableDuper then
-        parallelTacs := parallelTacs ++ [runDuper stxRef simpLemmas duperPremises includeLCtx configOptions]
+        if configOptions.preprocessing == .aesop then -- `runDuper` shouldn't be run with Aesop preprocessing
+          parallelTacs := parallelTacs ++ [runDuper stxRef simpLemmas duperPremises includeLCtx {configOptions with preprocessing := .no_preprocessing}]
+        else
+          parallelTacs := parallelTacs ++ [runDuper stxRef simpLemmas duperPremises includeLCtx configOptions]
       if !configOptions.disableGrind then
         parallelTacs := parallelTacs ++ [evalTactic (← `(tactic| grind? [$grindParamStxs,*]))]
       if !configOptions.disableSmt then
-        parallelTacs := parallelTacs ++ [smtPipeline stxRef simpLemmas smtPremises includeLCtx configOptions]
+        if configOptions.preprocessing == .aesop then -- `smtPipeline` shouldn't be run with Aesop preprocessing
+          parallelTacs := parallelTacs ++ [smtPipeline stxRef simpLemmas smtPremises includeLCtx {configOptions with preprocessing := .no_preprocessing}]
+        else
+          parallelTacs := parallelTacs ++ [smtPipeline stxRef simpLemmas smtPremises includeLCtx configOptions]
       match parallelTacs with
       | [] => throwError "Erroneous invocation of hammer: At least one of Aesop, Duper, Grind, and Lean-SMT must be enabled."
       | [singleTac] =>
