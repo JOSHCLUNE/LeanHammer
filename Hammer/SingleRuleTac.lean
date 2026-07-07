@@ -167,7 +167,7 @@ def smtSingleRuleTac (ps : Premises) (includeLCtx : Bool) : SingleRuleTac := fun
     let arrow := createArrow types g
     let mv ← mkFreshExprMVar arrow
     let (hs, mv') ← mv.mvarId!.introN ps.length
-    let res ← Smt.smt default mv' (hs.map (fun fv => .fvar fv))
+    let res ← Smt.smt {mono := true} mv' (hs.map (fun fv => .fvar fv))
     let unsat_core ←
       match res with
       | .unsat mvs uc => pure uc
