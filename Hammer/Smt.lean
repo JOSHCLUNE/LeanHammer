@@ -52,13 +52,11 @@ def smtPipeline (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.T
   trace[hammer.debug] "smt {cfg} {hints}"
   let coreUserInputFacts ← Smt.Tactic.evalSmtCore cfg hints
   let mut tacticsArr := preprocessingSuggestion -- The array of tactics that will be suggested to the user
-  if coreUserInputFacts.size > 0 && includeLCtx then
-    tacticsArr := tacticsArr.push $ ← `(tactic| smt $cfg [*, $(coreUserInputFacts),*])
-  else if coreUserInputFacts.size > 0 && !includeLCtx then
+  -- We do not use `includeLCtx` to optionally add `*` to the hints passed to `smt` because `coreUserInputFacts`
+  -- includes local hypotheses in the unsat core and Lean-auto's preprocessing doesn't allow duplicate terms
+  if coreUserInputFacts.size > 0 then
     tacticsArr := tacticsArr.push $ ← `(tactic| smt $cfg [$(coreUserInputFacts),*])
-  else if coreUserInputFacts.size == 0 && includeLCtx then
-    tacticsArr := tacticsArr.push $ ← `(tactic| smt $cfg [*])
-  else -- coreUserInputFacts.size == 0 && !includeLCtx
+  else
     tacticsArr := tacticsArr.push $ ← `(tactic| smt $cfg)
   -- Add tactic sequence suggestion
   let tacticSeq ← `(tacticSeq| $tacticsArr*)

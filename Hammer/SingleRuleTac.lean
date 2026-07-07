@@ -167,23 +167,44 @@ def smtSingleRuleTac (ps : Premises) (includeLCtx : Bool) : SingleRuleTac := fun
     let arrow := createArrow types g
     let mv ← mkFreshExprMVar arrow
     let (hs, mv') ← mv.mvarId!.introN ps.length
-    let res ← Smt.smt {mono := true} mv' (hs.map (fun fv => .fvar fv))
+    -- `Smt.smt` only sees the hints it is explicitly passed, so when `includeLCtx` is enabled, the local
+    -- context's propositional hypotheses must be passed alongside the hypotheses derived from `ps`
+    -- (mirroring what `smt [*, ps]` would do)
+    let lctxHyps ←
+      if includeLCtx then
+        mv'.withContext do
+          pure ((← Smt.Preprocess.getPropHyps).filter (fun fv => !hs.contains fv))
+      else
+        pure #[]
+    let res ← Smt.smt {mono := true} mv' (hs.map (fun fv => .fvar fv) ++ lctxHyps.map (fun fv => .fvar fv))
     let unsat_core ←
       match res with
       | .unsat mvs uc => pure uc
       | _ => throwError "[Smt.smt]: Got SAT from solver"
-    let names := unsat_core.map (fun e => let idx := hs.findIdx (fun z => .fvar z == e); ps[idx]!.2)
+    -- Only elements of the unsat core that come from `ps` are explicitly named in the suggestion. Elements
+    -- that are local hypotheses are already covered by `*` when `includeLCtx` is enabled, and naming them
+    -- alongside `*` would make the suggestion fail with "Auto does not accept duplicated input terms"
+    let names := unsat_core.filterMap (fun e => do
+      let idx ← hs.findIdx? (fun z => .fvar z == e)
+      ps[idx]?.map (fun p => p.2))
+    -- For the same reason, elements of `ps` that merely name a local hypothesis must not appear alongside `*`
+    let names ←
+      if includeLCtx then do
+        let lctx ← getLCtx
+        pure (names.filter (fun stx => !(stx.isIdent && (lctx.findFromUserName? stx.getId).isSome)))
+      else
+        pure names
     let namesT ← names.mapM cast_stx
     let idents ← namesT.mapM (fun i => `(Smt.Tactic.smtHintElem| $i:term))
     let cfg ← `(optConfig| +$(mkIdent `mono))
     let stx ←
-      if includeLCtx && !unsat_core.isEmpty then
+      if includeLCtx && !idents.isEmpty then
         `(tactic| smt $cfg [*, $(idents),*])
-      else if includeLCtx && unsat_core.isEmpty then
+      else if includeLCtx && idents.isEmpty then
         `(tactic| smt $cfg [*])
-      else if !includeLCtx && !unsat_core.isEmpty then
+      else if !includeLCtx && !idents.isEmpty then
         `(tactic| smt $cfg [$(idents),*])
-      else -- if !includeLCtx && unsat_core.isEmpty
+      else -- if !includeLCtx && idents.isEmpty
         `(tactic| smt $cfg)
     let tac := withoutRecover $ evalTactic stx
     let postGoals := (← Elab.Tactic.run input.goal tac |>.run').toArray
