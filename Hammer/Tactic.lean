@@ -278,32 +278,36 @@ def evalHammerWithArgs : Tactic
     maxSuggestions := maxSuggestions + userInputTerms.size, -- Add `userInputTerms.size` to ensure there are `maxSuggestions` non-duplicate premises
     caller := "hammer"
   }
-  /- Get the registered premise selector for premise selection.
+  let mut env ← getEnv
+  for mod in #["Hammer", "Smt", "Duper", "Auto", "Aesop", "cvc5"] do
+    env := moduleDenyListExt.addEntry env mod
+  withEnv env $ do
+    /- Get the registered premise selector for premise selection.
 
-     Currently, the registration mechanism for library suggestions is just global state, so the `set_library_suggestions` command
-     on line 14 should override the `set_library_suggestions` command in Lean.LibrarySuggestions.Default, but if a user invokes
-     `set_library_suggestions` after importing Hammer, then their command will override the command on line 14.
+      Currently, the registration mechanism for library suggestions is just global state, so the `set_library_suggestions` command
+      on line 14 should override the `set_library_suggestions` command in Lean.LibrarySuggestions.Default, but if a user invokes
+      `set_library_suggestions` after importing Hammer, then their command will override the command on line 14.
 
-     For now, this is fine because the current solution yields the desired behavior.
-     `Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile` is the effective default that users can override with
-     `set_library_suggestions`. However, a comment in Lean.LibrarySuggestions.Basic (line 392 of v4.26.0) indicates that the registration
-     mechanism is likely to change in the future, and if this occurs, I may need to adjust accordingly to preserve LeanHammer's intended behavior. -/
-  let selector ← getSelector
-  let defaultSelector := Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
-  let selector := selector.getD defaultSelector
-  let premiseSelectionStart ← IO.monoMsNow
-  let premises ←
-    if maxSuggestions == 0 then pure #[] -- If `maxSuggestions` is 0, then we don't need to waste time calling the premise selector
-    else selector goal librarySuggestionsConfig
-  let premises ← premises.mapM (fun p => unresolveNameGlobal p.name)
-  let premises ← premises.mapM (fun p => return (← `(term| $(mkIdent p))))
-  trace[hammer.profiling] "Premise selection took {(← IO.monoMsNow) - premiseSelectionStart}ms"
-  trace[hammer.premises] "user input terms: {userInputTerms}"
-  trace[hammer.premises] "premises from premise selector: {premises}"
-  let premises := premises.filter (fun p => !userInputTerms.contains p) -- Remove duplicates between `userInputTerms` and `premises`
-  trace[hammer.premises] "premises from premise selector after removing duplicates in user input terms: {premises}"
-  runHammer stxRef ∅ userInputTerms premises true configOptions
-  trace[hammer.profiling] "Total hammer runtime: {(← IO.monoMsNow) - hammerStart}ms"
+      For now, this is fine because the current solution yields the desired behavior.
+      `Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile` is the effective default that users can override with
+      `set_library_suggestions`. However, a comment in Lean.LibrarySuggestions.Basic (line 392 of v4.26.0) indicates that the registration
+      mechanism is likely to change in the future, and if this occurs, I may need to adjust accordingly to preserve LeanHammer's intended behavior. -/
+    let selector ← getSelector
+    let defaultSelector := Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
+    let selector := selector.getD defaultSelector
+    let premiseSelectionStart ← IO.monoMsNow
+    let premises ←
+      if maxSuggestions == 0 then pure #[] -- If `maxSuggestions` is 0, then we don't need to waste time calling the premise selector
+      else selector goal librarySuggestionsConfig
+    let premises ← premises.mapM (fun p => unresolveNameGlobal p.name)
+    let premises ← premises.mapM (fun p => return (← `(term| $(mkIdent p))))
+    trace[hammer.profiling] "Premise selection took {(← IO.monoMsNow) - premiseSelectionStart}ms"
+    trace[hammer.premises] "user input terms: {userInputTerms}"
+    trace[hammer.premises] "premises from premise selector: {premises}"
+    let premises := premises.filter (fun p => !userInputTerms.contains p) -- Remove duplicates between `userInputTerms` and `premises`
+    trace[hammer.premises] "premises from premise selector after removing duplicates in user input terms: {premises}"
+    runHammer stxRef ∅ userInputTerms premises true configOptions
+    trace[hammer.profiling] "Total hammer runtime: {(← IO.monoMsNow) - hammerStart}ms"
 | _ => throwUnsupportedSyntax
 
 -- Note, we no longer use `macro_rules` to process the cases where `hammer` is not given all of its arguments because `macro_rules` appears to
