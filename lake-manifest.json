@@ -38,7 +38,7 @@
    "rev": "95c408c38cd5a659e9d4555b6fa04451eaca8856",
    "name": "«premise-selection»",
    "manifestFile": "lake-manifest.json",
-   "inputRev": "95c408c38cd5a659e9d4555b6fa04451eaca8856",
+   "inputRev": "v4.32.0",
    "inherited": false,
    "configFile": "lakefile.toml"},
   {"url": "https://github.com/leanprover-community/quote4",
