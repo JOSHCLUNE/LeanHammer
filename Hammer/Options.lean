@@ -88,7 +88,7 @@ register_option hammer.aesopSmtPriorityDefault : Nat := {
 }
 
 register_option hammer.parallelismDefault : Bool := {
-  defValue := false
+  defValue := true
   descr := "The default value of the parallelism option"
 }
 
@@ -239,7 +239,7 @@ syntax (&"aesopPremisePriority" " := " numLit) : Hammer.configOption -- The prio
 syntax (&"aesopDuperPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `duper` within `aesop` (default: 10)
 syntax (&"aesopGrindPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `grind` within `aesop` (default: 5)
 syntax (&"aesopSmtPriority" " := " numLit) : Hammer.configOption -- The priority of calls to `lean-smt` within `aesop` (default: 10)
-syntax (&"parallelism" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to use parallelism (default: false)
+syntax (&"parallelism" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to use parallelism (default: true)
 syntax (&"outputAllSuggestions" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to show the user all suggestions or just the first one (default: false)
 
 structure ConfigurationOptions where
@@ -258,7 +258,7 @@ structure ConfigurationOptions where
   aesopPremises : Nat -- The number of premises sent to `aesop` (default: 32)
   grindPremises : Nat -- The number of premises sent to `grind` (default: 100)
   smtPremises : Nat -- The number of premises sent to `lean-smt` (default: 16)
-  parallelism : Bool -- Whether to use parallelism (default: false)
+  parallelism : Bool -- Whether to use parallelism (default: true)
   outputAllSuggestions : Bool -- Whether to show the user all suggestions or just the first one (default: false)
 deriving ToExpr
 
