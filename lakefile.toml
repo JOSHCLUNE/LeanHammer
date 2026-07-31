@@ -6,7 +6,7 @@ defaultTargets = ["Hammer"]
 [[require]]
 name = "«premise-selection»"
 git = "https://github.com/hanwenzhu/premise-selection"
-rev = "v4.32.0"
+rev = "d25e7b41f0afe92bcbc4be2fec7724eac120fbe0"
 
 [[require]]
 name = "«aesop»"
@@ -16,12 +16,14 @@ rev = "v4.32.0"
 [[require]]
 name = "«Duper»"
 git = "https://github.com/leanprover-community/duper.git"
-rev = "v4.32.0"
+rev = "2644270a98b55a3b2939abac90f84d415cf9dca0"
 
 [[require]]
 name = "«Smt»"
-git = "https://github.com/ufmg-smite/lean-smt.git"
-rev = "d114534c023806a1cb91e868547acc867a2779af" # no_mathlib branch
+git = "https://github.com/JOSHCLUNE/lean-smt.git"
+rev = "a889a7c3bf2547511cf0a532d68713a743b7e2e9"
+# git = "https://github.com/ufmg-smite/lean-smt.git"
+# rev = "d114534c023806a1cb91e868547acc867a2779af" # no_mathlib branch
 
 [[lean_lib]]
 name = "Hammer"

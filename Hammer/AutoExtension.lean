@@ -1,5 +1,12 @@
-import Aesop
-import Auto
+module
+
+public import Aesop
+public import Auto
+
+public meta import Aesop
+public meta import Auto
+
+public meta section
 
 /- **TODO** This file is currently a mishmash of code that was adapted from functions that appear in Lean-auto.
    This code should be rearranged into a more coherent structure. -/

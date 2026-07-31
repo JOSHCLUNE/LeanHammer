@@ -1,4 +1,10 @@
-import Duper
+module
+
+public import Duper
+
+public meta import Duper
+
+public meta section
 
 open Lean Meta Auto Elab Tactic Parser Tactic Duper
 
