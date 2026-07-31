@@ -1,4 +1,11 @@
-import Duper
+module
+
+public import Duper
+/- Everything `hammer` provides runs during elaboration, so its dependencies have to be available
+   at compile time as well. -/
+public meta import Duper
+
+public meta section
 
 open Lean Meta Auto Elab Tactic Parser Tactic Duper
 

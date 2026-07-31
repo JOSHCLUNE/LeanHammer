@@ -2,11 +2,14 @@ name = "Hammer"
 precompileModules = true
 preferReleaseBuild = true
 defaultTargets = ["Hammer"]
+testDriver = "HammerTest"
 
 [[require]]
 name = "«premise-selection»"
 git = "https://github.com/hanwenzhu/premise-selection"
-rev = "v4.32.0"
+# The `v4.32.0` tag predates premise-selection's adoption of the module system. `Hammer` is a
+# `module`, and a `module` cannot import a non-`module`, so we need a revision that has adopted it.
+rev = "d25e7b41f0afe92bcbc4be2fec7724eac120fbe0"
 
 [[require]]
 name = "«aesop»"
@@ -27,3 +30,8 @@ rev = "a889a7c3bf2547511cf0a532d68713a743b7e2e9"
 
 [[lean_lib]]
 name = "Hammer"
+
+# Not in `defaultTargets`, so a plain `lake build` stays unaffected; run these with `lake test`.
+[[lean_lib]]
+name = "HammerTest"
+globs = ["HammerTest.+"]

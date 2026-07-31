@@ -1,6 +1,15 @@
-import Hammer.Tactic
-import Aesop
-import Qq
+module
+
+public import Hammer.Tactic
+public import Aesop
+public import Qq
+/- Everything `hammer` provides runs during elaboration, so its dependencies have to be available
+   at compile time as well. -/
+public meta import Hammer.Tactic
+public meta import Aesop
+public meta import Qq
+
+public meta section
 
 open Lean Meta Parser Elab Tactic Auto Duper Syntax Aesop Qq
 

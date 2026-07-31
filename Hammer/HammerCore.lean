@@ -1,8 +1,19 @@
-import Hammer.DuperCore
-import Hammer.Options
-import Hammer.Errors
-import Hammer.AutoExtension
-import Aesop
+module
+
+public import Hammer.DuperCore
+public import Hammer.Options
+public import Hammer.Errors
+public import Hammer.AutoExtension
+public import Aesop
+/- Everything `hammer` provides runs during elaboration, so its dependencies have to be available
+   at compile time as well. -/
+public meta import Hammer.DuperCore
+public meta import Hammer.Options
+public meta import Hammer.Errors
+public meta import Hammer.AutoExtension
+public meta import Aesop
+
+public meta section
 
 open Lean Meta Parser Elab Tactic Auto Duper Syntax
 

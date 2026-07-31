@@ -49,6 +49,23 @@ If you use a version of Mathlib that differs from the most recent one, the premi
 
 You are free to try to use a version of the hammer with a nearby version of Lean and Mathlib, but there are no guarantees it will work. As explained below, the hammer has several dependencies, and they break often as Lean changes. If you add the Hammer to an existing project and don't use `lake update`, you should use `lake update Hammer` to fetch the hammer and Zipperposition. You should also put the `Hammer` dependency before the `mathlib` dependency in `lakefile.toml` or `lakefile.lean`: Mathlib and LeanHammer share a dependency on `batteries`, and unless you favor Mathlib's version, you will end up recompiling Mathlib.
 
+### Using LeanHammer with the Module System
+
+LeanHammer has adopted Lean's module system, so it can be used from projects that have adopted it too. Since a `module` cannot import a non-`module`, this was previously impossible. A `module` of your own can now import LeanHammer directly:
+
+```lean
+module
+
+import Hammer
+
+example : True := by
+  hammer
+```
+
+Use `public import Hammer` instead if you want your own module to re-export LeanHammer to whatever imports it in turn.
+
+Nothing changes for projects that have not adopted the module system: a plain `import Hammer` in a plain Lean file continues to work exactly as before, and the `hammer` tactic behaves identically either way.
+
 ### Notes for Mac Users
 
 **On Runtime:**

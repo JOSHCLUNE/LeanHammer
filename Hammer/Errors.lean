@@ -1,4 +1,11 @@
-import Lean
+module
+
+public import Lean
+/- Everything `hammer` provides runs during elaboration, so its dependencies have to be available
+   at compile time as well. -/
+public meta import Lean
+
+public meta section
 
 open Lean Meta Parser Elab Tactic Syntax
 

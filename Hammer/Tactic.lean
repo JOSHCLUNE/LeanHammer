@@ -1,9 +1,21 @@
-import Hammer.HammerCore
-import Hammer.Smt
-import Hammer.ParallelismUtil
-import PremiseSelection
-import Aesop
-import Qq
+module
+
+public import Hammer.HammerCore
+public import Hammer.Smt
+public import Hammer.ParallelismUtil
+public import PremiseSelection
+public import Aesop
+public import Qq
+/- Everything `hammer` provides runs during elaboration, so its dependencies have to be available
+   at compile time as well. -/
+public meta import Hammer.HammerCore
+public meta import Hammer.Smt
+public meta import Hammer.ParallelismUtil
+public meta import PremiseSelection
+public meta import Aesop
+public meta import Qq
+
+public meta section
 
 initialize
   Lean.registerTraceClass `hammer.premises
