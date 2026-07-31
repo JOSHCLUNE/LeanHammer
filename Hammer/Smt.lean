@@ -4,8 +4,7 @@ public import Smt
 public import Aesop
 public import Hammer.Options
 public import Hammer.Errors
-/- Everything `hammer` provides runs during elaboration, so its dependencies have to be available
-   at compile time as well. -/
+
 public meta import Smt
 public meta import Aesop
 public meta import Hammer.Options

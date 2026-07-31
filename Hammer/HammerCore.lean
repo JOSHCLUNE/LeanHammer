@@ -5,8 +5,7 @@ public import Hammer.Options
 public import Hammer.Errors
 public import Hammer.AutoExtension
 public import Aesop
-/- Everything `hammer` provides runs during elaboration, so its dependencies have to be available
-   at compile time as well. -/
+
 public meta import Hammer.DuperCore
 public meta import Hammer.Options
 public meta import Hammer.Errors

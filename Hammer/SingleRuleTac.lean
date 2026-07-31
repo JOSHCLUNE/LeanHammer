@@ -3,8 +3,7 @@ module
 public import Hammer.Tactic
 public import Aesop
 public import Qq
-/- Everything `hammer` provides runs during elaboration, so its dependencies have to be available
-   at compile time as well. -/
+
 public meta import Hammer.Tactic
 public meta import Aesop
 public meta import Qq

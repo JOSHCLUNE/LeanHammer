@@ -6,8 +6,7 @@ public import Hammer.ParallelismUtil
 public import PremiseSelection
 public import Aesop
 public import Qq
-/- Everything `hammer` provides runs during elaboration, so its dependencies have to be available
-   at compile time as well. -/
+
 public meta import Hammer.HammerCore
 public meta import Hammer.Smt
 public meta import Hammer.ParallelismUtil

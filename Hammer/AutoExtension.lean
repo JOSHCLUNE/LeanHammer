@@ -2,8 +2,7 @@ module
 
 public import Aesop
 public import Auto
-/- Everything `hammer` provides runs during elaboration, so its dependencies have to be available
-   at compile time as well. -/
+
 public meta import Aesop
 public meta import Auto
 

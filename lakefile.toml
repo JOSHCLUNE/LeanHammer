@@ -7,8 +7,6 @@ testDriver = "HammerTest"
 [[require]]
 name = "«premise-selection»"
 git = "https://github.com/hanwenzhu/premise-selection"
-# The `v4.32.0` tag predates premise-selection's adoption of the module system. `Hammer` is a
-# `module`, and a `module` cannot import a non-`module`, so we need a revision that has adopted it.
 rev = "d25e7b41f0afe92bcbc4be2fec7724eac120fbe0"
 
 [[require]]
@@ -19,7 +17,7 @@ rev = "v4.32.0"
 [[require]]
 name = "«Duper»"
 git = "https://github.com/leanprover-community/duper.git"
-rev = "6094eebc0e18a2e9d00f7d636385b150a376bff3"
+rev = "2644270a98b55a3b2939abac90f84d415cf9dca0"
 
 [[require]]
 name = "«Smt»"
