@@ -2,7 +2,6 @@ name = "Hammer"
 precompileModules = true
 preferReleaseBuild = true
 defaultTargets = ["Hammer"]
-testDriver = "HammerTest"
 
 [[require]]
 name = "«premise-selection»"
@@ -28,8 +27,3 @@ rev = "a889a7c3bf2547511cf0a532d68713a743b7e2e9"
 
 [[lean_lib]]
 name = "Hammer"
-
-# Not in `defaultTargets`, so a plain `lake build` stays unaffected; run these with `lake test`.
-[[lean_lib]]
-name = "HammerTest"
-globs = ["HammerTest.+"]
