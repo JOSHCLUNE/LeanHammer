@@ -465,6 +465,7 @@ def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (configOptio
       let o := o.set `auto.tptp.premiseSelection true
       let o := o.set `auto.tptp.solver.name "zipperposition"
       let o := o.set `auto.mono.ignoreNonQuasiHigherOrder true
+      let o := o.set `auto.lamReif.ignoreUnusable true
       o.set `auto.native true
     ) x
 
@@ -472,6 +473,7 @@ def withDuperOptions [Monad m] [MonadError m] [MonadWithOptions m] (x : m α) : 
   withOptions
     (fun o =>
       let o := o.set `duper.ignoreUnusableFacts true
+      let o := o.set `auto.lamReif.ignoreUnusable true
       o.set `auto.mono.ignoreNonQuasiHigherOrder true
     ) x
 
