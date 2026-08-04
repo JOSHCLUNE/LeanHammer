@@ -1,6 +1,14 @@
-import Hammer.Tactic
-import Aesop
-import Qq
+module
+
+public import Hammer.Tactic
+public import Aesop
+public import Qq
+
+public meta import Hammer.Tactic
+public meta import Aesop
+public meta import Qq
+
+public meta section
 
 open Lean Meta Parser Elab Tactic Auto Duper Syntax Aesop Qq
 

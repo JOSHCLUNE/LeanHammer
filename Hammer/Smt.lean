@@ -1,7 +1,16 @@
-import Smt
-import Aesop
-import Hammer.Options
-import Hammer.Errors
+module
+
+public import Smt
+public import Aesop
+public import Hammer.Options
+public import Hammer.Errors
+
+public meta import Smt
+public meta import Aesop
+public meta import Hammer.Options
+public meta import Hammer.Errors
+
+public meta section
 
 open Lean Meta Parser Elab Tactic Auto Syntax
 

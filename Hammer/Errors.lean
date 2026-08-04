@@ -1,4 +1,10 @@
-import Lean
+module
+
+public import Lean
+
+public meta import Lean
+
+public meta section
 
 open Lean Meta Parser Elab Tactic Syntax
 
