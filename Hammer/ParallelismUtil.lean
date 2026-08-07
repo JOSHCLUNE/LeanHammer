@@ -200,28 +200,31 @@ def tryAllTacsOnGoal (stxRef : Syntax) (outputAllSuggestions : Bool) (wallclockT
   let mut foundCompleteProof := false
   let mut completeSuggestions ← Core.getMessageLog
   let mut incompleteSuggestions ← Core.getMessageLog
-  while h : 0 < remainingTasks.length do
-    Core.checkSystem s!"{decl_name%}"
-    let (firstRes, otherTasks) ← IO.waitAny' remainingTasks h
-    trace[hammer.profiling] "Time until some task completed: {(← IO.monoMsNow) - runParallelTacticsStart}ms"
-    remainingTasks := otherTasks
-    match firstRes with
-    | .wallclock =>
-      IO.CancelToken.set cancelTk
-      break
-    | .tactic firstRes =>
+  try
+    while h : 0 < remainingTasks.length do
+      Core.checkSystem s!"{decl_name%}"
+      let (firstRes, otherTasks) ← IO.waitAny' remainingTasks h
+      trace[hammer.profiling] "Time until some task completed: {(← IO.monoMsNow) - runParallelTacticsStart}ms"
+      remainingTasks := otherTasks
       match firstRes with
-      | .ok (some res, fwdMsgs) =>
-        trace[hammer.profiling] "Time until the first complete proof was found: {(← IO.monoMsNow) - runParallelTacticsStart}ms"
-        g.assign res
-        foundCompleteProof := true
-        completeSuggestions := completeSuggestions ++ fwdMsgs
-        if outputAllSuggestions then continue
-        else IO.CancelToken.set cancelTk; break
-      | .ok (none, fwdMsgs) =>
-        incompleteSuggestions := incompleteSuggestions ++ fwdMsgs
-        continue
-      | .error _ => continue
+      | .wallclock =>
+        IO.CancelToken.set cancelTk
+        break
+      | .tactic firstRes =>
+        match firstRes with
+        | .ok (some res, fwdMsgs) =>
+          trace[hammer.profiling] "Time until the first complete proof was found: {(← IO.monoMsNow) - runParallelTacticsStart}ms"
+          g.assign res
+          foundCompleteProof := true
+          completeSuggestions := completeSuggestions ++ fwdMsgs
+          if outputAllSuggestions then continue
+          else IO.CancelToken.set cancelTk; break
+        | .ok (none, fwdMsgs) =>
+          incompleteSuggestions := incompleteSuggestions ++ fwdMsgs
+          continue
+        | .error _ => continue
+  finally
+    IO.CancelToken.set cancelTk
   trace[hammer.profiling] "Running parallel tactics took {(← IO.monoMsNow) - runParallelTacticsStart}ms"
   for event in (← taskEventsRef.get) do
     trace[hammer.profiling] "{event}"
