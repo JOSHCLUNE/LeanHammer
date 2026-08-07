@@ -55,20 +55,24 @@ def runAesopWithSubprocedures (duperPremises : Array Term) (addIdentStxs : TSynt
         stxOpt.map (fun stx => (fact, proof, params, isFromGoal, stx.raw.getId.toString)))
     let ruleTacType := mkConst `Aesop.SingleRuleTac
     let duperRuleTacVal ← mkAppM `HammerCore.duperSingleRuleTac #[q($formulas), q($includeLCtx), q($configOptions)]
+    let duperRuleTacName := mkPrivateName (← getEnv) `instantiatedDuperRuleTac
     let duperRuleTacDecl :=
-      mkDefinitionValEx `instantiatedDuperRuleTac [] ruleTacType duperRuleTacVal
-        ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedDuperRuleTac]
+      mkDefinitionValEx duperRuleTacName [] ruleTacType duperRuleTacVal
+        ReducibilityHints.opaque DefinitionSafety.safe [duperRuleTacName]
+    modifyEnv (markMeta · duperRuleTacName)
     addAndCompile $ Declaration.defnDecl duperRuleTacDecl
-    let duperRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedDuperRuleTac)))
+    let duperRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent duperRuleTacName)))
     let addAutoUnsafeRule ←
       `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopDuperPriority):num% tactic $duperRuleTacStx))
     -- Building `grindRuleTacStx`
     let grindRuleTacVal ← mkAppM `HammerCore.grindSingleRuleTac #[q($grindPremiseNames)]
+    let grindRuleTacName := mkPrivateName (← getEnv) `instantiatedGrindRuleTac
     let grindRuleTacDecl :=
-      mkDefinitionValEx `instantiatedGrindRuleTac [] ruleTacType grindRuleTacVal
-        ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedGrindRuleTac]
+      mkDefinitionValEx grindRuleTacName [] ruleTacType grindRuleTacVal
+        ReducibilityHints.opaque DefinitionSafety.safe [grindRuleTacName]
+    modifyEnv (markMeta · grindRuleTacName)
     addAndCompile $ Declaration.defnDecl grindRuleTacDecl
-    let grindRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedGrindRuleTac)))
+    let grindRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent grindRuleTacName)))
     let addGrindUnsafeRule ←
       `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopGrindPriority):num% tactic $grindRuleTacStx))
     -- Building `smtRuleTacStx`
@@ -84,11 +88,13 @@ def runAesopWithSubprocedures (duperPremises : Array Term) (addIdentStxs : TSynt
     let smtHintTypes ← elabedSmtHints.mapM (fun h => Meta.inferType h)
     let smtHintTypesAndStx : List (Expr × Syntax) := List.zip smtHintTypes.toList $ smtPremises.toList.map (fun t => t.raw)
     let smtRuleTacVal ← mkAppM `HammerCore.Smt.smtSingleRuleTac #[q($smtHintTypesAndStx), q($includeLCtx)]
+    let smtRuleTacName := mkPrivateName (← getEnv) `instantiatedSmtRuleTac
     let smtRuleTacDecl :=
-      mkDefinitionValEx `instantiatedSmtRuleTac [] ruleTacType smtRuleTacVal
-        ReducibilityHints.opaque DefinitionSafety.safe [`instantiatedSmtRuleTac]
+      mkDefinitionValEx smtRuleTacName [] ruleTacType smtRuleTacVal
+        ReducibilityHints.opaque DefinitionSafety.safe [smtRuleTacName]
+    modifyEnv (markMeta · smtRuleTacName)
     addAndCompile $ Declaration.defnDecl smtRuleTacDecl
-    let smtRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `instantiatedSmtRuleTac)))
+    let smtRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent smtRuleTacName)))
     let addSmtUnsafeRule ←
       `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopSmtPriority):num% tactic $smtRuleTacStx))
     -- Calling Aesop with the set of subprocedures determined by `configOptions`
