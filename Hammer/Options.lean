@@ -25,7 +25,7 @@ register_option hammer.solverTimeoutDefault : Nat := {
 }
 
 register_option hammer.wallclockTimeoutDefault : Nat := {
-  defValue := 10
+  defValue := 5
   descr := "The default wallclock timeout for `hammer` (in seconds). A timeout of 0 means no timeout."
 }
 

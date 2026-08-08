@@ -54,14 +54,17 @@ def smtPipeline (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.T
   let premises : Array (TSyntax `Smt.Tactic.smtHintElem) ← premises.getElems.mapM fun (p : TSyntax `term) => do
     let x ← `(Smt.Tactic.smtHintElem| $p:term)
     return x
+  -- We create `cfg` and `cfgWithTimeout` because LeanHammer's internal `smt` call should include a timeout argument,
+  -- but the suggestion LeanHammer produces doesn't need to include said argument
   let cfg ← `(optConfig| +$(mkIdent `mono))
+  let cfgWithTimeout ← `(optConfig| +$(mkIdent `mono) (timeout := $(Syntax.mkNatLit configOptions.solverTimeout)))
   let hints ←
     if includeLCtx then `(Smt.Tactic.smtHints| [*, $premises,*])
     else `(Smt.Tactic.smtHints| [$premises,*])
-  trace[hammer.debug] "smt {cfg} {hints}"
+  trace[hammer.debug] "smt {cfgWithTimeout} {hints}"
   -- Capture the main goal's local context before `Smt.Tactic.evalSmtCore` closes the goal
   let lctx ← withMainContext do getLCtx
-  let coreUserInputFacts ← Smt.Tactic.evalSmtCore cfg hints
+  let coreUserInputFacts ← Smt.Tactic.evalSmtCore cfgWithTimeout hints
   -- When `includeLCtx` is enabled, the suggestion uses `*`, so elements of the unsat core that are covered
   -- by `*` (literal `*` elements and identifiers naming local hypotheses) must be filtered out, as naming
   -- them alongside `*` would make the suggestion fail with "Auto does not accept duplicated input terms"

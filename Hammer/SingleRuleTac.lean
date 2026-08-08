@@ -167,7 +167,7 @@ def createArrow (es : List Expr) (e : Expr) : Expr :=
     let hd : Q(Prop) := hd
     q($hd -> $r)
 
-def smtSingleRuleTac (ps : Premises) (includeLCtx : Bool) : SingleRuleTac := fun input => do
+def smtSingleRuleTac (ps : Premises) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : SingleRuleTac := fun input => do
   let preState ← saveState
   input.goal.withContext do
     let g ← input.goal.getType
@@ -184,7 +184,7 @@ def smtSingleRuleTac (ps : Premises) (includeLCtx : Bool) : SingleRuleTac := fun
           pure ((← Smt.Preprocess.getPropHyps).filter (fun fv => !hs.contains fv))
       else
         pure #[]
-    let res ← Smt.smt {mono := true} mv' (hs.map (fun fv => .fvar fv) ++ lctxHyps.map (fun fv => .fvar fv))
+    let res ← Smt.smt {mono := true, timeout := configOptions.solverTimeout} mv' (hs.map (fun fv => .fvar fv) ++ lctxHyps.map (fun fv => .fvar fv))
     let unsat_core ←
       match res with
       | .unsat mvs uc => pure uc
@@ -204,6 +204,8 @@ def smtSingleRuleTac (ps : Premises) (includeLCtx : Bool) : SingleRuleTac := fun
         pure names
     let namesT ← names.mapM cast_stx
     let idents ← namesT.mapM (fun i => `(Smt.Tactic.smtHintElem| $i:term))
+    -- `cfg` doesn't include a timeout parameter because although LeanHammer's solverTimeout should be propagated to Lean-SMT for
+    -- internal calls, that timeout doesn't need to clutter the final suggestion
     let cfg ← `(optConfig| +$(mkIdent `mono))
     let stx ←
       if includeLCtx && !idents.isEmpty then
