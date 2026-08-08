@@ -87,7 +87,7 @@ def runAesopWithSubprocedures (duperPremises : Array Term) (addIdentStxs : TSynt
         pure ({}, #[])
     let smtHintTypes ← elabedSmtHints.mapM (fun h => Meta.inferType h)
     let smtHintTypesAndStx : List (Expr × Syntax) := List.zip smtHintTypes.toList $ smtPremises.toList.map (fun t => t.raw)
-    let smtRuleTacVal ← mkAppM `HammerCore.Smt.smtSingleRuleTac #[q($smtHintTypesAndStx), q($includeLCtx)]
+    let smtRuleTacVal ← mkAppM `HammerCore.Smt.smtSingleRuleTac #[q($smtHintTypesAndStx), q($includeLCtx), q($configOptions)]
     let smtRuleTacName := mkPrivateName (← getEnv) `instantiatedSmtRuleTac
     let smtRuleTacDecl :=
       mkDefinitionValEx smtRuleTacName [] ruleTacType smtRuleTacVal
