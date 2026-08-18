@@ -152,9 +152,12 @@ partial def autoPremiseEligibleAux (e : Expr) : MetaM Bool := do
     **TODO** Test the efficacy of this filter and improve it if it remains common for premises to get through
     which cause Lean-auto's translation to fail. -/
 def autoPremiseEligible (autoPremise : Term) : TacticM Bool := do
-  let name ← realizeGlobalConstNoOverload autoPremise
-  let type ← instantiateMVars (← getConstInfo name).type
-  autoPremiseEligibleAux type
+  try
+    let name ← realizeGlobalConstNoOverload autoPremise
+    let type ← instantiateMVars (← getConstInfo name).type
+    autoPremiseEligibleAux type
+  catch _ =>
+    return false
 
 /-- Checks whether `premiseName` corresponds to a constant that `grind` can use. The set of `thmKinds` that is tested was determined
     by reading `Lean.Meta.Grind.mkEMatchTheoremAndSuggest`. -/
