@@ -123,7 +123,8 @@ def runDuper (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tact
     -- **NOTE** We collect `formulas` using `Duper.collectAssumptions` rather than `Auto.collectAllLemmas` because `Auto.collectAllLemmas`
     -- does not currently support a mode where unusable facts are ignored.
     let formulas ← withDuperOptions $ collectAssumptions premises includeLCtx goalDecls
-    withSolverOptions configOptions do
+    -- `runDuper` calls the solver independently as part of its own procedure, so the long timeout is used
+    withSolverOptions configOptions.solverLongTimeout do
       let lemmas ← formulasToAutoLemmas formulas (includeInSetOfSupport := true)
       -- Calling `Auto.unfoldConstAndPreprocessLemma` is an essential step for the monomorphization procedure
       let lemmas ←

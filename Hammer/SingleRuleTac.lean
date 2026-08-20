@@ -65,7 +65,8 @@ def duperSingleRuleTac : SingleRuleTac := λ input => do
             | some stx => some (fact, proof, params, isFromGoal, some s!"{stx}")
         )
       let formulas := (formulas.map (fun (fact, proof, params, isFromGoal, stxOpt) => (fact, proof, params, isFromGoal, some stxOpt))) ++ lctxFormulas
-      withSolverOptions configOptions do
+      -- The solver is called by Aesop as a subprocedure, so the short timeout is used
+      withSolverOptions configOptions.solverShortTimeout do
         let lemmas ← formulasWithStringsToAutoLemmas formulas (includeInSetOfSupport := true)
         -- Calling `Auto.unfoldConstAndPreprocessLemma` is an essential step for the monomorphization procedure
         let lemmas ←
@@ -188,7 +189,8 @@ def smtSingleRuleTac : SingleRuleTac := fun input => do
           pure ((← Smt.Preprocess.getPropHyps).filter (fun fv => !hs.contains fv))
       else
         pure #[]
-    let res ← Smt.smt {mono := true, timeout := configOptions.solverTimeout} mv' (hs.map (fun fv => .fvar fv) ++ lctxHyps.map (fun fv => .fvar fv))
+    -- Lean-SMT is called by Aesop as a subprocedure, so the short timeout is used
+    let res ← Smt.smt {mono := true, timeout := configOptions.solverShortTimeout} mv' (hs.map (fun fv => .fvar fv) ++ lctxHyps.map (fun fv => .fvar fv))
     let unsat_core ←
       match res with
       | .unsat mvs uc => pure uc
@@ -208,7 +210,7 @@ def smtSingleRuleTac : SingleRuleTac := fun input => do
         pure names
     let namesT ← names.mapM cast_stx
     let idents ← namesT.mapM (fun i => `(Smt.Tactic.smtHintElem| $i:term))
-    -- `cfg` doesn't include a timeout parameter because although LeanHammer's solverTimeout should be propagated to Lean-SMT for
+    -- `cfg` doesn't include a timeout parameter because although LeanHammer's solverShortTimeout should be propagated to Lean-SMT for
     -- internal calls, that timeout doesn't need to clutter the final suggestion
     let cfg ← `(optConfig| +$(mkIdent `mono))
     let stx ←
