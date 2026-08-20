@@ -33,6 +33,36 @@ syntax (name := hammer) "hammer" (ppSpace "[" (term),* "]")? (ppSpace "{"Hammer.
 
 set_library_suggestions open Lean.LibrarySuggestions in Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
 
+/-- The Duper subprocedure invoked by Aesop takes as input:
+    - `formulas` : `List (Expr × Expr × Array Name × Bool × String)`
+    - `includeLCtx` : `Bool`
+    - `configOptions` : `HammerCore.ConfigurationOptions` -/
+abbrev duperSubprocedureInputType := (List (Expr × Expr × Array Name × Bool × String)) × Bool × HammerCore.ConfigurationOptions
+
+/-- An environment extension that holds the input intended for the Duper subprocedure invoked by Aesop (`HammerCore.duperSingleRuleTac`). -/
+initialize duperSubprocedureInputExt : EnvExtension (Option duperSubprocedureInputType) ←
+  registerEnvExtension (pure none) (asyncMode := .local)
+
+/-- The Grind subprocedure invoked by Aesop takes as input:
+    - `premiseNames` : `Array Name` -/
+abbrev grindSubprocedureInputType := Array Name
+
+/-- An environment extension that holds the input intended for the Grind subprocedure invoked by Aesop
+    (`HammerCore.grindSingleRuleTac`). -/
+initialize grindSubprocedureInputExt : EnvExtension (Option grindSubprocedureInputType) ←
+  registerEnvExtension (pure none) (asyncMode := .local)
+
+/-- The Lean-SMT subprocedure invoked by Aesop takes as input:
+    - `hints` : `List (Expr × Syntax)`
+    - `includeLCtx` : `Bool`
+    - `configOptions` : `HammerCore.ConfigurationOptions` -/
+abbrev smtSubprocedureInputType := (List (Expr × Syntax)) × Bool × HammerCore.ConfigurationOptions
+
+/-- An environment extension that holds the input intended for the Lean-SMT subprocedure invoked by Aesop
+    (`HammerCore.Smt.smtSingleRuleTac`). -/
+initialize smtSubprocedureInputExt : EnvExtension (Option smtSubprocedureInputType) ←
+  registerEnvExtension (pure none) (asyncMode := .local)
+
 /-- This functions produces one Aesop call where Aesop is given:
     - unsafe rules corresponding to individual premise applications (these are determined by `addIdentStxs`).
     - one unsafe rule to call the Lean-auto/Zipperposition/Duper pipeline (if `configOptions.disableDuper` is
@@ -53,26 +83,13 @@ def runAesopWithSubprocedures (duperPremises : Array Term) (addIdentStxs : TSynt
       -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
       formulas.filterMap (fun (fact, proof, params, isFromGoal, stxOpt) =>
         stxOpt.map (fun stx => (fact, proof, params, isFromGoal, stx.raw.getId.toString)))
-    let ruleTacType := mkConst `Aesop.SingleRuleTac
-    let duperRuleTacVal ← mkAppM `HammerCore.duperSingleRuleTac #[q($formulas), q($includeLCtx), q($configOptions)]
-    let duperRuleTacName := mkPrivateName (← getEnv) `instantiatedDuperRuleTac
-    let duperRuleTacDecl :=
-      mkDefinitionValEx duperRuleTacName [] ruleTacType duperRuleTacVal
-        ReducibilityHints.opaque DefinitionSafety.safe [duperRuleTacName]
-    modifyEnv (markMeta · duperRuleTacName)
-    addAndCompile $ Declaration.defnDecl duperRuleTacDecl
-    let duperRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent duperRuleTacName)))
+    modifyEnv (duperSubprocedureInputExt.setState · (some (formulas, includeLCtx, configOptions)))
+    let duperRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `_root_.HammerCore.duperSingleRuleTac)))
     let addAutoUnsafeRule ←
       `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopDuperPriority):num% tactic $duperRuleTacStx))
     -- Building `grindRuleTacStx`
-    let grindRuleTacVal ← mkAppM `HammerCore.grindSingleRuleTac #[q($grindPremiseNames)]
-    let grindRuleTacName := mkPrivateName (← getEnv) `instantiatedGrindRuleTac
-    let grindRuleTacDecl :=
-      mkDefinitionValEx grindRuleTacName [] ruleTacType grindRuleTacVal
-        ReducibilityHints.opaque DefinitionSafety.safe [grindRuleTacName]
-    modifyEnv (markMeta · grindRuleTacName)
-    addAndCompile $ Declaration.defnDecl grindRuleTacDecl
-    let grindRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent grindRuleTacName)))
+    modifyEnv (grindSubprocedureInputExt.setState · (some grindPremiseNames))
+    let grindRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `_root_.HammerCore.grindSingleRuleTac)))
     let addGrindUnsafeRule ←
       `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopGrindPriority):num% tactic $grindRuleTacStx))
     -- Building `smtRuleTacStx`
@@ -87,14 +104,8 @@ def runAesopWithSubprocedures (duperPremises : Array Term) (addIdentStxs : TSynt
         pure ({}, #[])
     let smtHintTypes ← elabedSmtHints.mapM (fun h => Meta.inferType h)
     let smtHintTypesAndStx : List (Expr × Syntax) := List.zip smtHintTypes.toList $ smtPremises.toList.map (fun t => t.raw)
-    let smtRuleTacVal ← mkAppM `HammerCore.Smt.smtSingleRuleTac #[q($smtHintTypesAndStx), q($includeLCtx), q($configOptions)]
-    let smtRuleTacName := mkPrivateName (← getEnv) `instantiatedSmtRuleTac
-    let smtRuleTacDecl :=
-      mkDefinitionValEx smtRuleTacName [] ruleTacType smtRuleTacVal
-        ReducibilityHints.opaque DefinitionSafety.safe [smtRuleTacName]
-    modifyEnv (markMeta · smtRuleTacName)
-    addAndCompile $ Declaration.defnDecl smtRuleTacDecl
-    let smtRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent smtRuleTacName)))
+    modifyEnv (smtSubprocedureInputExt.setState · (some (smtHintTypesAndStx, includeLCtx, configOptions)))
+    let smtRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `_root_.HammerCore.Smt.smtSingleRuleTac)))
     let addSmtUnsafeRule ←
       `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopSmtPriority):num% tactic $smtRuleTacStx))
     -- Calling Aesop with the set of subprocedures determined by `configOptions`
