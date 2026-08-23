@@ -204,7 +204,8 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
   (userInputTerms premises : Array Term) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit :=
   withMainContext do
     let premiseFilteringStart ← IO.monoMsNow
-    let mut duperPremises := userInputTerms ++ premises.take configOptions.duperPremises
+    let mut duperPremisesShort : Array Term := #[]
+    let mut duperPremisesLong : Array Term := #[]
     let aesopPremises := userInputTerms ++ premises.take configOptions.aesopPremises
     let grindPremises := userInputTerms ++ premises.take configOptions.grindPremises
     let mut smtPremises := userInputTerms ++ premises.take configOptions.smtPremises
@@ -212,7 +213,10 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
     let mut grindParamStxs : TSyntaxArray `Lean.Parser.Tactic.grindParam := #[]
     let mut grindPremiseNames : Array Name := #[]
     if !configOptions.disableDuper then
-      duperPremises ← duperPremises.filterM autoPremiseEligible -- Duper uses Lean-auto for preprocessing
+      -- Duper uses Lean-auto for preprocessing
+      let eligiblePremises ← premises.filterM autoPremiseEligible
+      duperPremisesShort := userInputTerms ++ eligiblePremises.take configOptions.duperPremisesShort
+      duperPremisesLong := userInputTerms ++ eligiblePremises.take configOptions.duperPremisesLong
     if !configOptions.disableAesop then
       for p in aesopPremises do
         -- **TODO** Add support for terms that aren't just names of premises
@@ -234,16 +238,16 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       -- disabled) is included.
       let mut parallelTacs : List (TacticM Unit) := []
       if !configOptions.disableAesop then
-        parallelTacs := parallelTacs ++ [runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions]
+        parallelTacs := parallelTacs ++ [runAesopWithSubprocedures duperPremisesShort addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions]
         if !configOptions.disableDuper || !configOptions.disableGrind || !configOptions.disableSmt then
           parallelTacs := parallelTacs ++
-            [runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx
+            [runAesopWithSubprocedures duperPremisesShort addIdentStxs grindPremiseNames smtPremises includeLCtx
               {configOptions with disableDuper := true, disableGrind := true, disableSmt := true}]
       if !configOptions.disableDuper then
         if configOptions.preprocessing == .aesop then -- `runDuper` shouldn't be run with Aesop preprocessing
-          parallelTacs := parallelTacs ++ [runDuper stxRef simpLemmas duperPremises includeLCtx {configOptions with preprocessing := .no_preprocessing}]
+          parallelTacs := parallelTacs ++ [runDuper stxRef simpLemmas duperPremisesLong includeLCtx {configOptions with preprocessing := .no_preprocessing}]
         else
-          parallelTacs := parallelTacs ++ [runDuper stxRef simpLemmas duperPremises includeLCtx configOptions]
+          parallelTacs := parallelTacs ++ [runDuper stxRef simpLemmas duperPremisesLong includeLCtx configOptions]
       if !configOptions.disableGrind then
         parallelTacs := parallelTacs ++ [evalTactic (← `(tactic| grind? [$grindParamStxs,*]))]
       if !configOptions.disableSmt then
@@ -271,10 +275,10 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       | true, false, true, true =>
         if hammer.singleTacticParallel.get (← getOptions) then
           tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
-            runDuper stxRef simpLemmas duperPremises includeLCtx configOptions
+            runDuper stxRef simpLemmas duperPremisesLong includeLCtx configOptions
           ]
         else
-          runSingularTactic (runDuper stxRef simpLemmas duperPremises includeLCtx configOptions)
+          runSingularTactic (runDuper stxRef simpLemmas duperPremisesLong includeLCtx configOptions)
       | true, true, true, false =>
         if hammer.singleTacticParallel.get (← getOptions) then
           tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
@@ -285,10 +289,10 @@ def runHammer (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tac
       | false, _, _, _ =>
         if hammer.singleTacticParallel.get (← getOptions) then
           tryAllTacsOnGoal stxRef configOptions.outputAllSuggestions configOptions.wallclockTimeout [
-            runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions
+            runAesopWithSubprocedures duperPremisesShort addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions
           ]
         else
-          runSingularTactic (runAesopWithSubprocedures duperPremises addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions)
+          runSingularTactic (runAesopWithSubprocedures duperPremisesShort addIdentStxs grindPremiseNames smtPremises includeLCtx configOptions)
       | true, true, true, true => throwError "Erroneous invocation of hammer: At least one of Aesop, Duper, Grind, and Lean-SMT must be enabled."
       | _, _, _, _ => throwError "Erroneous invocation of hammer: Aesop or parallelism is needed to enable more than one of Duper, Grind, and SMT."
 
@@ -300,7 +304,7 @@ def evalHammerWithArgs : Tactic
   let goal ← getMainGoal
   let userInputTerms : Array Term := userInputTerms
   let configOptions ← parseConfigOptions configOptions
-  let autoPremises := if configOptions.disableDuper then 0 else configOptions.duperPremises
+  let autoPremises := if configOptions.disableDuper then 0 else max configOptions.duperPremisesShort configOptions.duperPremisesLong
   let aesopPremises := if configOptions.disableAesop then 0 else configOptions.aesopPremises
   let grindPremises := if configOptions.disableGrind then 0 else configOptions.grindPremises
   let smtPremises := if configOptions.disableSmt then 0 else configOptions.smtPremises
