@@ -77,47 +77,46 @@ def runAesopWithSubprocedures (duperPremises : Array Term) (addIdentStxs : TSynt
   (grindPremiseNames : Array Name) (smtPremises : Array Term) (includeLCtx : Bool)
   (configOptions : HammerCore.ConfigurationOptions) : TacticM Unit :=
   withMainContext do withOptions (fun o => o.set `aesop.warn.applyIff false) do
-    -- Building `duperRuleTacStx`
-    let formulas ← withDuperOptions $ collectAssumptions duperPremises false #[]
-    let formulas : List (Expr × Expr × Array Name × Bool × String) :=
-      -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
-      formulas.filterMap (fun (fact, proof, params, isFromGoal, stxOpt) =>
-        stxOpt.map (fun stx => (fact, proof, params, isFromGoal, stx.raw.getId.toString)))
-    modifyEnv (duperSubprocedureInputExt.setState · (some (formulas, includeLCtx, configOptions)))
-    let duperRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `_root_.HammerCore.duperSingleRuleTac)))
-    let addAutoUnsafeRule ←
-      `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopDuperPriority):num% tactic $duperRuleTacStx))
-    -- Building `grindRuleTacStx`
-    modifyEnv (grindSubprocedureInputExt.setState · (some grindPremiseNames))
-    let grindRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `_root_.HammerCore.grindSingleRuleTac)))
-    let addGrindUnsafeRule ←
-      `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopGrindPriority):num% tactic $grindRuleTacStx))
-    -- Building `smtRuleTacStx`
-    let smtHints ← smtPremises.mapM (fun n => `(Smt.Tactic.smtHintElem| $n:term))
-    let (_, elabedSmtHints) ←
-      try
-        -- `Smt.Tactic.elabHints` can yield the error: "failed to elaborate eliminator, expected type is not available". Lean-SMT's internal
-        -- filter should handle this, but if it doesn't it is better to silently pass nothing to Lean-SMT than to throw an error.
-        Smt.Tactic.elabHints (← `(Smt.Tactic.smtHints| [$(smtHints),*]))
-      catch _ =>
-        trace[hammer.debug] "{decl_name%} :: Failed to elab smt hints: {smtHints}, passing zero hints to Lean-SMT"
-        pure ({}, #[])
-    let smtHintTypes ← elabedSmtHints.mapM (fun h => Meta.inferType h)
-    let smtHintTypesAndStx : List (Expr × Syntax) := List.zip smtHintTypes.toList $ smtPremises.toList.map (fun t => t.raw)
-    modifyEnv (smtSubprocedureInputExt.setState · (some (smtHintTypesAndStx, includeLCtx, configOptions)))
-    let smtRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `_root_.HammerCore.Smt.smtSingleRuleTac)))
-    let addSmtUnsafeRule ←
-      `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopSmtPriority):num% tactic $smtRuleTacStx))
-    -- Calling Aesop with the set of subprocedures determined by `configOptions`
-    match configOptions.disableDuper, configOptions.disableGrind, configOptions.disableSmt with
-    | true, true, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs*))
-    | true, true, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addSmtUnsafeRule))
-    | true, false, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addGrindUnsafeRule))
-    | true, false, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addGrindUnsafeRule $addSmtUnsafeRule))
-    | false, true, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule))
-    | false, true, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule $addSmtUnsafeRule))
-    | false, false, true => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule $addGrindUnsafeRule))
-    | false, false, false => Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $addAutoUnsafeRule $addGrindUnsafeRule $addSmtUnsafeRule))
+    let mut subprocedures : Array (TSyntax `Aesop.tactic_clause) := #[]
+    -- Building `duperRuleTacStx` and adding it to `subprocedures`
+    if !configOptions.disableDuper then
+      let formulas ← withDuperOptions $ collectAssumptions duperPremises false #[]
+      let formulas : List (Expr × Expr × Array Name × Bool × String) :=
+        -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
+        formulas.filterMap (fun (fact, proof, params, isFromGoal, stxOpt) =>
+          stxOpt.map (fun stx => (fact, proof, params, isFromGoal, stx.raw.getId.toString)))
+      modifyEnv (duperSubprocedureInputExt.setState · (some (formulas, includeLCtx, configOptions)))
+      let duperRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `_root_.HammerCore.duperSingleRuleTac)))
+      let addAutoUnsafeRule ←
+        `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopDuperPriority):num% tactic $duperRuleTacStx))
+      subprocedures := subprocedures.push addAutoUnsafeRule
+    -- Building `grindRuleTacStx` and adding it to `subprocedures`
+    if !configOptions.disableGrind then
+      modifyEnv (grindSubprocedureInputExt.setState · (some grindPremiseNames))
+      let grindRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `_root_.HammerCore.grindSingleRuleTac)))
+      let addGrindUnsafeRule ←
+        `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopGrindPriority):num% tactic $grindRuleTacStx))
+      subprocedures := subprocedures.push addGrindUnsafeRule
+    -- Building `smtRuleTacStx` and adding it to `subprocedures`
+    if !configOptions.disableSmt then
+      let smtHints ← smtPremises.mapM (fun n => `(Smt.Tactic.smtHintElem| $n:term))
+      let (_, elabedSmtHints) ←
+        try
+          -- `Smt.Tactic.elabHints` can yield the error: "failed to elaborate eliminator, expected type is not available". Lean-SMT's internal
+          -- filter should handle this, but if it doesn't it is better to silently pass nothing to Lean-SMT than to throw an error.
+          Smt.Tactic.elabHints (← `(Smt.Tactic.smtHints| [$(smtHints),*]))
+        catch _ =>
+          trace[hammer.debug] "{decl_name%} :: Failed to elab smt hints: {smtHints}, passing zero hints to Lean-SMT"
+          pure ({}, #[])
+      let smtHintTypes ← elabedSmtHints.mapM (fun h => Meta.inferType h)
+      let smtHintTypesAndStx : List (Expr × Syntax) := List.zip smtHintTypes.toList $ smtPremises.toList.map (fun t => t.raw)
+      modifyEnv (smtSubprocedureInputExt.setState · (some (smtHintTypesAndStx, includeLCtx, configOptions)))
+      let smtRuleTacStx ← `(Aesop.rule_expr| ($(mkIdent `_root_.HammerCore.Smt.smtSingleRuleTac)))
+      let addSmtUnsafeRule ←
+        `(Aesop.tactic_clause| (add unsafe $(Syntax.mkNatLit configOptions.aesopSmtPriority):num% tactic $smtRuleTacStx))
+      subprocedures := subprocedures.push addSmtUnsafeRule
+    -- Calling Aesop with `subprocedures`
+    Aesop.evalAesop (← `(tactic| aesop? $addIdentStxs* $subprocedures*))
 
 /-- Runs `Meta.isProof` on `e` and every subterm of `e`. If `Meta.isProof` ever returns `true`,
     then `autoPremiseTypeEligibleAux` returns `false`.
