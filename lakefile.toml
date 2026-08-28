@@ -16,7 +16,7 @@ rev = "v4.33.0"
 [[require]]
 name = "«Duper»"
 git = "https://github.com/leanprover-community/duper.git"
-rev = "v4.33.0"
+rev = "549f20200c5d12d6b387677129e0cdff8b6c6c80"
 
 [[require]]
 name = "«Smt»"

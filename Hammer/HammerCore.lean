@@ -125,7 +125,7 @@ def runDuper (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.Tact
     let formulas ← withDuperOptions $ collectAssumptions premises includeLCtx goalDecls
     -- `runDuper` calls the solver independently as part of its own procedure, so the long timeout is used
     withSolverOptions configOptions.solverLongTimeout do
-      let lemmas ← formulasToAutoLemmas formulas (includeInSetOfSupport := true)
+      let lemmas ← formulasToAutoLemmas formulas.toList (includeInSetOfSupport := true)
       -- Calling `Auto.unfoldConstAndPreprocessLemma` is an essential step for the monomorphization procedure
       let lemmas ←
         tryCatchRuntimeEx

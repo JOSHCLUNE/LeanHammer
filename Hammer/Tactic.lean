@@ -34,10 +34,10 @@ syntax (name := hammer) "hammer" (ppSpace "[" (term),* "]")? (ppSpace "{"Hammer.
 set_library_suggestions open Lean.LibrarySuggestions in Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
 
 /-- The Duper subprocedure invoked by Aesop takes as input:
-    - `formulas` : `List (Expr × Expr × Array Name × Bool × String)`
+    - `formulas` : `Array (Expr × Expr × Array Name × Bool × String)`
     - `includeLCtx` : `Bool`
     - `configOptions` : `HammerCore.ConfigurationOptions` -/
-abbrev duperSubprocedureInputType := (List (Expr × Expr × Array Name × Bool × String)) × Bool × HammerCore.ConfigurationOptions
+abbrev duperSubprocedureInputType := (Array (Expr × Expr × Array Name × Bool × String)) × Bool × HammerCore.ConfigurationOptions
 
 /-- An environment extension that holds the input intended for the Duper subprocedure invoked by Aesop (`HammerCore.duperSingleRuleTac`). -/
 initialize duperSubprocedureInputExt : EnvExtension (Option duperSubprocedureInputType) ←
@@ -80,8 +80,10 @@ def runAesopWithSubprocedures (duperPremises : Array Term) (addIdentStxs : TSynt
     let mut subprocedures : Array (TSyntax `Aesop.tactic_clause) := #[]
     -- Building `duperRuleTacStx` and adding it to `subprocedures`
     if !configOptions.disableDuper then
+      -- `withAllLCtx` is set to `false` in this `collectAssumptions` call because the relevant local context to collect is the
+      -- local context where the Duper subprocedure is called by Aesop, not the top main context where `hammer` is being called
       let formulas ← withDuperOptions $ collectAssumptions duperPremises false #[]
-      let formulas : List (Expr × Expr × Array Name × Bool × String) :=
+      let formulas : Array (Expr × Expr × Array Name × Bool × String) :=
         -- **TODO** This approach prohibits handling arguments that aren't disambiguated theorem names
         formulas.filterMap (fun (fact, proof, params, isFromGoal, stxOpt) =>
           stxOpt.map (fun stx => (fact, proof, params, isFromGoal, stx.raw.getId.toString)))

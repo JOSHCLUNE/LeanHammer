@@ -64,10 +64,17 @@ def duperSingleRuleTac : SingleRuleTac := λ input => do
             | none => some (fact, proof, params, isFromGoal, none)
             | some stx => some (fact, proof, params, isFromGoal, some s!"{stx}")
         )
-      let formulas := (formulas.map (fun (fact, proof, params, isFromGoal, stxOpt) => (fact, proof, params, isFromGoal, some stxOpt))) ++ lctxFormulas
+      /- It is important that `lctxFormulas` (which includes assumptions from `goalDecls`) comes before the `formulas` produced
+         by premise selection. This is to maintain the implicit invariant that the most important/relevant lemmas come first.
+
+         This implicit invariant is important because `Auto.Monomorphization.saturate` processes lemmas in the order that they are
+         provided, and `auto.mono.saturationThreshold` can cause later lemmas to not be processed (`trace.auto.mono` shows when
+         Monomorphization's saturation threshold has been reached). -/
+      let formulas := formulas.map (fun (fact, proof, params, isFromGoal, stxOpt) => (fact, proof, params, isFromGoal, some stxOpt))
+      let formulas := lctxFormulas.append formulas
       -- The solver is called by Aesop as a subprocedure, so the short timeout is used
       withSolverOptions configOptions.solverShortTimeout do
-        let lemmas ← formulasWithStringsToAutoLemmas formulas (includeInSetOfSupport := true)
+        let lemmas ← formulasWithStringsToAutoLemmas formulas.toList (includeInSetOfSupport := true)
         -- Calling `Auto.unfoldConstAndPreprocessLemma` is an essential step for the monomorphization procedure
         let lemmas ←
           tryCatchRuntimeEx
@@ -99,9 +106,9 @@ def duperSingleRuleTac : SingleRuleTac := λ input => do
         -- Build a Duper call using includeLCtx and each coreUserInputFact
         let stx ←
           if !coreFormulas.isEmpty && includeLCtx then
-            `(tactic| duper [*, $(coreFormulas.toArray),*] {preprocessing := full})
+            `(tactic| duper [*, $coreFormulas,*] {preprocessing := full})
           else if !coreFormulas.isEmpty && !includeLCtx then
-            `(tactic| duper [$(coreFormulas.toArray),*] {preprocessing := full})
+            `(tactic| duper [$coreFormulas,*] {preprocessing := full})
           else if coreFormulas.isEmpty && includeLCtx then
             `(tactic| duper [*] {preprocessing := full})
           else -- coreFormulas.isEmpty && !includeLCtx
