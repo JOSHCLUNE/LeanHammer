@@ -14,14 +14,14 @@ git = "https://github.com/leanprover-community/aesop"
 rev = "v4.33.0"
 
 [[require]]
-name = "«Duper»"
-git = "https://github.com/leanprover-community/duper.git"
-rev = "549f20200c5d12d6b387677129e0cdff8b6c6c80"
-
-[[require]]
 name = "«Smt»"
 git = "https://github.com/ufmg-smite/lean-smt.git"
 rev = "1fbc840e0da8b26d23cb3ac9a652635f0d4bb86b" # no_mathlib branch
+
+[[require]]
+name = "«Duper»"
+git = "https://github.com/leanprover-community/duper.git"
+rev = "66df5b18491b3460e6ddc3646a3dc8540a26a6d2" # Points towards Monomorphization.saturate_refactor branch of Lean-auto
 
 [[lean_lib]]
 name = "Hammer"
