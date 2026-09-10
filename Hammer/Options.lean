@@ -19,9 +19,14 @@ declare_syntax_cat Hammer.bool_lit (behavior := symbol)
 syntax "true" : Hammer.bool_lit
 syntax "false" : Hammer.bool_lit
 
-register_option hammer.solverTimeoutDefault : Nat := {
+register_option hammer.solverShortTimeoutDefault : Nat := {
+  defValue := 1
+  descr := "The default short timeout for the solver (in seconds). This is used when Aesop calls multiple solvers as subprocedures."
+}
+
+register_option hammer.solverLongTimeoutDefault : Nat := {
   defValue := 5
-  descr := "The default timeout for the solver (in seconds)"
+  descr := "The default long timeout for the solver (in seconds). This is used when a solver is called independently as part of its own procedure."
 }
 
 register_option hammer.wallclockTimeoutDefault : Nat := {
@@ -59,9 +64,14 @@ register_option hammer.aesopPremisesDefault : Nat := {
   descr := "The default number of premises sent to aesop to be used as unsafe rules"
 }
 
-register_option hammer.duperPremisesDefault : Nat := {
+register_option hammer.duperPremisesShortDefault : Nat := {
   defValue := 16
-  descr := "The default number of premises sent to duper"
+  descr := "The default number of premises sent to duper when called as a subprocedure in Aesop"
+}
+
+register_option hammer.duperPremisesLongDefault : Nat := {
+  defValue := 100
+  descr := "The default number of premises sent to duper when called as an independent procedure"
 }
 
 register_option hammer.grindPremisesDefault : Nat := {
@@ -106,14 +116,16 @@ register_option hammer.outputAllSuggestionsDefault : Bool := {
 
 namespace HammerCore
 
-def getHammerSolverTimeoutDefault (opts : Options) : Nat := hammer.solverTimeoutDefault.get opts
+def getHammerSolverShortTimeoutDefault (opts : Options) : Nat := hammer.solverShortTimeoutDefault.get opts
+def getHammerSolverLongTimeoutDefault (opts : Options) : Nat := hammer.solverLongTimeoutDefault.get opts
 def getHammerWallclockTimeoutDefault (opts : Options) : Nat := hammer.wallclockTimeoutDefault.get opts
 def getPreprocessingDefault (opts : Options) : String := hammer.preprocessingDefault.get opts
 def getDisableAesopDefault (opts : Options) : Bool := hammer.disableAesopDefault.get opts
 def getDisableDuperDefault (opts : Options) : Bool := hammer.disableDuperDefault.get opts
 def getDisableGrindDefault (opts : Options) : Bool := hammer.disableGrindDefault.get opts
 def getDisableSmtDefault (opts : Options) : Bool := hammer.disableSmtDefault.get opts
-def getDuperPremisesDefault (opts : Options) : Nat := hammer.duperPremisesDefault.get opts
+def getDuperPremisesShortDefault (opts : Options) : Nat := hammer.duperPremisesShortDefault.get opts
+def getDuperPremisesLongDefault (opts : Options) : Nat := hammer.duperPremisesLongDefault.get opts
 def getAesopPremisesDefault (opts : Options) : Nat := hammer.aesopPremisesDefault.get opts
 def getGrindPremisesDefault (opts : Options) : Nat := hammer.grindPremisesDefault.get opts
 def getSmtPremisesDefault (opts : Options) : Nat := hammer.smtPremisesDefault.get opts
@@ -124,9 +136,13 @@ def getAesopSmtPriorityDefault (opts : Options) : Nat := hammer.aesopSmtPriority
 def getParallelismDefault (opts : Options) : Bool := hammer.parallelismDefault.get opts
 def getOutputAllSuggestionsDefault (opts : Options) : Bool := hammer.outputAllSuggestionsDefault.get opts
 
-def getHammerSolverTimeoutDefaultM : CoreM Nat := do
+def getHammerSolverShortTimeoutDefaultM : CoreM Nat := do
   let opts ← getOptions
-  return getHammerSolverTimeoutDefault opts
+  return getHammerSolverShortTimeoutDefault opts
+
+def getHammerSolverLongTimeoutDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getHammerSolverLongTimeoutDefault opts
 
 def getHammerWallclockTimeoutDefaultM : CoreM Nat := do
   let opts ← getOptions
@@ -152,9 +168,13 @@ def getDisableSmtDefaultM : CoreM Bool := do
   let opts ← getOptions
   return getDisableSmtDefault opts
 
-def getDuperPremisesDefaultM : CoreM Nat := do
+def getDuperPremisesShortDefaultM : CoreM Nat := do
   let opts ← getOptions
-  return getDuperPremisesDefault opts
+  return getDuperPremisesShortDefault opts
+
+def getDuperPremisesLongDefaultM : CoreM Nat := do
+  let opts ← getOptions
+  return getDuperPremisesLongDefault opts
 
 def getAesopPremisesDefaultM : CoreM Nat := do
   let opts ← getOptions
@@ -231,14 +251,16 @@ def elabBoolLit [Monad m] [MonadError m] (stx : TSyntax `Hammer.bool_lit) : m Bo
     | `(bool_lit| false) => return false
     | _ => Elab.throwUnsupportedSyntax
 
-syntax (&"solverTimeout" " := " numLit) : Hammer.configOption
+syntax (&"solverShortTimeout" " := " numLit) : Hammer.configOption
+syntax (&"solverLongTimeout" " := " numLit) : Hammer.configOption
 syntax (&"wallclockTimeout" " := " numLit) : Hammer.configOption
 syntax (&"preprocessing" " := " Hammer.preprocessing) : Hammer.configOption
 syntax (&"disableDuper" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"disableAesop" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"disableGrind" " := " Hammer.bool_lit) : Hammer.configOption
 syntax (&"disableSmt" " := " Hammer.bool_lit) : Hammer.configOption
-syntax (&"duperPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `duper` (default: 16)
+syntax (&"duperPremisesShort" " := " numLit) : Hammer.configOption -- The number of premises sent to `duper` when called as a subprocedure in Aesop (default: 16)
+syntax (&"duperPremisesLong" " := " numLit) : Hammer.configOption -- The number of premises sent to `duper` when called as an independent procedure (default: 100)
 syntax (&"aesopPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `aesop` (default: 32)
 syntax (&"grindPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `grind` (default: 100)
 syntax (&"smtPremises" " := " numLit) : Hammer.configOption -- The number of premises sent to `lean-smt` (default: 16)
@@ -250,7 +272,8 @@ syntax (&"parallelism" " := " Hammer.bool_lit) : Hammer.configOption -- Whether 
 syntax (&"outputAllSuggestions" " := " Hammer.bool_lit) : Hammer.configOption -- Whether to show the user all suggestions or just the first one (default: false)
 
 structure ConfigurationOptions where
-  solverTimeout : Nat
+  solverShortTimeout : Nat -- The solver timeout used when Aesop calls multiple solvers as subprocedures
+  solverLongTimeout : Nat -- The solver timeout used when a solver is called independently as part of its own procedure
   wallclockTimeout : Nat
   preprocessing : Preprocessing
   disableDuper : Bool
@@ -261,7 +284,8 @@ structure ConfigurationOptions where
   aesopDuperPriority : Nat
   aesopGrindPriority : Nat
   aesopSmtPriority : Nat
-  duperPremises : Nat -- The number of premises sent to `duper` (default: 16)
+  duperPremisesShort : Nat -- The number of premises sent to `duper` when called as a subprocedure in Aesop (default: 16)
+  duperPremisesLong : Nat -- The number of premises sent to `duper` when called as an independent procedure (default: 100)
   aesopPremises : Nat -- The number of premises sent to `aesop` (default: 32)
   grindPremises : Nat -- The number of premises sent to `grind` (default: 100)
   smtPremises : Nat -- The number of premises sent to `lean-smt` (default: 16)
@@ -279,8 +303,14 @@ macro_rules | `(tactic| hammerCore [$simpLemmas,*] [$facts,*]) => `(tactic| hamm
 
 /-- Checks to ensure that the set of given `configOptions` is usable. -/
 def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM ConfigurationOptions := do
-  if configOptions.wallclockTimeout > 0 && configOptions.wallclockTimeout < configOptions.solverTimeout then
-    throwError "Erroneous invocation of hammer: The wallclockTimeout must be greater than or equal to the solverTimeout"
+  if configOptions.solverShortTimeout > configOptions.solverLongTimeout then
+    throwError "Erroneous invocation of hammer: The solverShortTimeout must be less than or equal to the solverLongTimeout"
+  if configOptions.wallclockTimeout == 0 then
+    throwError "Erroneous invocation of hammer: The wallclockTimeout must be greater than 0"
+  if configOptions.wallclockTimeout < configOptions.solverShortTimeout then
+    throwError "Erroneous invocation of hammer: The wallclockTimeout must be greater than or equal to the solverShortTimeout"
+  if configOptions.wallclockTimeout < configOptions.solverLongTimeout then
+    throwError "Erroneous invocation of hammer: The wallclockTimeout must be greater than or equal to the solverLongTimeout"
   if !configOptions.parallelism && configOptions.outputAllSuggestions then
     throwError "Erroneous invocation of hammer: The outputAllSuggestions option can only be enabled when parallelism is enabled"
   if configOptions.disableAesop && configOptions.disableDuper && configOptions.disableGrind && configOptions.disableSmt then
@@ -310,14 +340,16 @@ def validateConfigOptions (configOptions : ConfigurationOptions) : TacticM Confi
   return configOptions
 
 def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : TacticM ConfigurationOptions := do
-  let mut solverTimeoutOpt := none
+  let mut solverShortTimeoutOpt := none
+  let mut solverLongTimeoutOpt := none
   let mut wallclockTimeoutOpt := none
   let mut preprocessingOpt := none
   let mut disableDuperOpt := none
   let mut disableAesopOpt := none
   let mut disableGrindOpt := none
   let mut disableSmtOpt := none
-  let mut duperPremisesOpt := none
+  let mut duperPremisesShortOpt := none
+  let mut duperPremisesLongOpt := none
   let mut aesopPremisesOpt := none
   let mut grindPremisesOpt := none
   let mut smtPremisesOpt := none
@@ -329,9 +361,12 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   let mut outputAllSuggestionsOpt := none
   for configOptionStx in configOptionsStx do
     match configOptionStx with
-    | `(Hammer.configOption| solverTimeout := $userSolverTimeout:num) =>
-      if solverTimeoutOpt.isNone then solverTimeoutOpt := some (TSyntax.getNat userSolverTimeout)
-      else throwError "Erroneous invocation of hammer: The solverTimeout option has been specified multiple times"
+    | `(Hammer.configOption| solverShortTimeout := $userSolverShortTimeout:num) =>
+      if solverShortTimeoutOpt.isNone then solverShortTimeoutOpt := some (TSyntax.getNat userSolverShortTimeout)
+      else throwError "Erroneous invocation of hammer: The solverShortTimeout option has been specified multiple times"
+    | `(Hammer.configOption| solverLongTimeout := $userSolverLongTimeout:num) =>
+      if solverLongTimeoutOpt.isNone then solverLongTimeoutOpt := some (TSyntax.getNat userSolverLongTimeout)
+      else throwError "Erroneous invocation of hammer: The solverLongTimeout option has been specified multiple times"
     | `(Hammer.configOption| wallclockTimeout := $userWallclockTimeout:num) =>
       if wallclockTimeoutOpt.isNone then wallclockTimeoutOpt := some (TSyntax.getNat userWallclockTimeout)
       else throwError "Erroneous invocation of hammer: The wallclockTimeout option has been specified multiple times"
@@ -350,9 +385,12 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | `(Hammer.configOption| disableSmt := $disableSmtBoolLit:Hammer.bool_lit) =>
       if disableSmtOpt.isNone then disableSmtOpt := some $ ← elabBoolLit disableSmtBoolLit
       else throwError "Erroneous invocation of hammer: The disableSmt option has been specified multiple times"
-    | `(Hammer.configOption| duperPremises := $userDuperPremises:num) =>
-      if duperPremisesOpt.isNone then duperPremisesOpt := some (TSyntax.getNat userDuperPremises)
-      else throwError "Erroneous invocation of hammer: The duperPremises option has been specified multiple times"
+    | `(Hammer.configOption| duperPremisesShort := $userDuperPremisesShort:num) =>
+      if duperPremisesShortOpt.isNone then duperPremisesShortOpt := some (TSyntax.getNat userDuperPremisesShort)
+      else throwError "Erroneous invocation of hammer: The duperPremisesShort option has been specified multiple times"
+    | `(Hammer.configOption| duperPremisesLong := $userDuperPremisesLong:num) =>
+      if duperPremisesLongOpt.isNone then duperPremisesLongOpt := some (TSyntax.getNat userDuperPremisesLong)
+      else throwError "Erroneous invocation of hammer: The duperPremisesLong option has been specified multiple times"
     | `(Hammer.configOption| aesopPremises := $userAesopPremises:num) =>
       if aesopPremisesOpt.isNone then aesopPremisesOpt := some (TSyntax.getNat userAesopPremises)
       else throwError "Erroneous invocation of hammer: The aesopPremises option has been specified multiple times"
@@ -382,10 +420,14 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
       else throwError "Erroneous invocation of hammer: The outputAllSuggestions option has been specified multiple times"
     | _ => throwUnsupportedSyntax
   -- Set default values for options that were not specified
-  let solverTimeout ←
-    match solverTimeoutOpt with
-    | none => getHammerSolverTimeoutDefaultM
-    | some solverTimeout => pure solverTimeout
+  let solverShortTimeout ←
+    match solverShortTimeoutOpt with
+    | none => getHammerSolverShortTimeoutDefaultM
+    | some solverShortTimeout => pure solverShortTimeout
+  let solverLongTimeout ←
+    match solverLongTimeoutOpt with
+    | none => getHammerSolverLongTimeoutDefaultM
+    | some solverLongTimeout => pure solverLongTimeout
   let wallclockTimeout ←
     match wallclockTimeoutOpt with
     | none => getHammerWallclockTimeoutDefaultM
@@ -412,10 +454,14 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
       if disableAesop && (← getPreprocessingDefaultM) == "aesop" then pure Preprocessing.no_preprocessing
       else elabPreprocessingDefault
     | some preprocessing => pure preprocessing
-  let duperPremises ←
-    match duperPremisesOpt with
-    | none => getDuperPremisesDefaultM
-    | some duperPremises => pure duperPremises
+  let duperPremisesShort ←
+    match duperPremisesShortOpt with
+    | none => getDuperPremisesShortDefaultM
+    | some duperPremisesShort => pure duperPremisesShort
+  let duperPremisesLong ←
+    match duperPremisesLongOpt with
+    | none => getDuperPremisesLongDefaultM
+    | some duperPremisesLong => pure duperPremisesLong
   let aesopPremises ←
     match aesopPremisesOpt with
     | none => getAesopPremisesDefaultM
@@ -453,9 +499,11 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
     | none => getOutputAllSuggestionsDefaultM
     | some outputAllSuggestions => pure outputAllSuggestions
   let configOptions := {
-    solverTimeout := solverTimeout, wallclockTimeout := wallclockTimeout, preprocessing := preprocessing,
+    solverShortTimeout := solverShortTimeout, solverLongTimeout := solverLongTimeout,
+    wallclockTimeout := wallclockTimeout, preprocessing := preprocessing,
     disableDuper := disableDuper, disableGrind := disableGrind, disableAesop := disableAesop, disableSmt := disableSmt,
-    duperPremises := duperPremises, aesopPremises := aesopPremises, grindPremises := grindPremises,
+    duperPremisesShort := duperPremisesShort, duperPremisesLong := duperPremisesLong,
+    aesopPremises := aesopPremises, grindPremises := grindPremises,
     smtPremises := smtPremises, aesopPremisePriority := aesopPremisePriority, aesopDuperPriority := aesopDuperPriority,
     aesopGrindPriority := aesopGrindPriority, aesopSmtPriority := aesopSmtPriority, parallelism := parallelism,
     outputAllSuggestions := outputAllSuggestions
@@ -463,11 +511,13 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   let configOptions ← validateConfigOptions configOptions
   return configOptions
 
-def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (configOptions : ConfigurationOptions) (x : m α) : m α :=
+/-- `solverTimeout` should be `configOptions.solverShortTimeout` when the solver is called by Aesop as a subprocedure
+    and `configOptions.solverLongTimeout` when the solver is called independently as part of its own procedure. -/
+def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (solverTimeout : Nat) (x : m α) : m α :=
   withOptions
     (fun o =>
       let o := o.set `auto.tptp true
-      let o := o.set `auto.tptp.timeout configOptions.solverTimeout
+      let o := o.set `auto.tptp.timeout solverTimeout
       let o := o.set `auto.smt false
       let o := o.set `auto.tptp.premiseSelection true
       let o := o.set `auto.tptp.solver.name "zipperposition"

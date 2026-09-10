@@ -14,14 +14,14 @@ git = "https://github.com/leanprover-community/aesop"
 rev = "v4.33.0"
 
 [[require]]
-name = "«Duper»"
-git = "https://github.com/leanprover-community/duper.git"
-rev = "v4.33.0"
-
-[[require]]
 name = "«Smt»"
 git = "https://github.com/ufmg-smite/lean-smt.git"
-rev = "1fbc840e0da8b26d23cb3ac9a652635f0d4bb86b" # no_mathlib branch
+rev = "e87b5c9c88eaf669f3cb85c73a6e75972a9c1018" # no_mathlib branch
+
+[[require]]
+name = "«Duper»"
+git = "https://github.com/leanprover-community/duper.git"
+rev = "34f6d228626adf1921f9fb314b0b6bd02c1a82b5"
 
 [[lean_lib]]
 name = "Hammer"

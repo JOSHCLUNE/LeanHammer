@@ -57,7 +57,7 @@ def getDuperCoreLemmas (unsatCoreDerivLeafStrings : Array String) (userFacts : S
       coreUserFacts := coreUserFacts.push factStx
   -- Build `formulas` to pass into `runDuperPortfolioMode`
   trace[hammer.debug] "{decl_name%} :: Collecting assumptions. coreUserFacts: {coreUserFacts}"
-  let mut formulas := (← collectAssumptions coreUserFacts includeAllLctx goalDecls).toArray
+  let formulas ← collectAssumptions coreUserFacts includeAllLctx goalDecls
   -- Try to reconstruct the proof using `runDuperPortfolioMode`
   let prf ←
     try

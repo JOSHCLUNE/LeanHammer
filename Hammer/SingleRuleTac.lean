@@ -14,18 +14,19 @@ open Lean Meta Parser Elab Tactic Auto Duper Syntax Aesop Qq
 
 namespace HammerCore
 
-/-- Constructs a `SingleRuleTac` that uses Lean-auto/Zipperposition to attempt to solve the input goal with `formulas` (and all facts in the local context
-    if `includeLCtx` is enabled), and either throws an error (if Lean-auto/Zipperposition fail) or suggests a Duper invocation using the subset of `formulas`
-    that Zipperposition used to find a proof.
+/-- Constructs a `SingleRuleTac` that uses Lean-auto/Zipperposition to attempt to solve the input goal with `formulas` (retrieved from
+    `Hammer.duperSubprocedureInputExt`) and all facts in the local context if `includeLCtx` is enabled, then either throws an error
+    (if Lean-auto/Zipperposition fail) or suggests a Duper invocation using the subset of `formulas` that Zipperposition used to find a proof.
 
     **TODO** Currently, Zipperposition's unsat core is not used to minimize the set of formulas from the local context that are sent to Duper, but in
     the future, this behavior should be added as an option (it should theoretically improve the strength of some suggested Duper invocations at the cost
     of increasing the size of all suggested Duper invocations). -/
-def duperSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool × String))
-  (includeLCtx : Bool) (configOptions : ConfigurationOptions) : SingleRuleTac := λ input => do
+def duperSingleRuleTac : SingleRuleTac := λ input => do
   let preState ← saveState
   input.goal.withContext do
     Core.checkSystem s!"{decl_name%}"
+    let some (formulas, includeLCtx, configOptions) := Hammer.duperSubprocedureInputExt.getState (← getEnv)
+      | throwError "{decl_name%} :: The Duper subprocedure's input was not set (this rule is only meant to be invoked by `hammer`)"
     let lctxBeforeIntros ← getLCtx
     let originalMainGoal := input.goal
     let goalType ← originalMainGoal.getType
@@ -63,9 +64,17 @@ def duperSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool × S
             | none => some (fact, proof, params, isFromGoal, none)
             | some stx => some (fact, proof, params, isFromGoal, some s!"{stx}")
         )
-      let formulas := (formulas.map (fun (fact, proof, params, isFromGoal, stxOpt) => (fact, proof, params, isFromGoal, some stxOpt))) ++ lctxFormulas
-      withSolverOptions configOptions do
-        let lemmas ← formulasWithStringsToAutoLemmas formulas (includeInSetOfSupport := true)
+      /- It is important that `lctxFormulas` (which includes assumptions from `goalDecls`) comes before the `formulas` produced
+         by premise selection. This is to maintain the implicit invariant that the most important/relevant lemmas come first.
+
+         This implicit invariant is important because `Auto.Monomorphization.saturate` processes lemmas in the order that they are
+         provided, and `auto.mono.saturationThreshold` can cause later lemmas to not be processed (`trace.auto.mono` shows when
+         Monomorphization's saturation threshold has been reached). -/
+      let formulas := formulas.map (fun (fact, proof, params, isFromGoal, stxOpt) => (fact, proof, params, isFromGoal, some stxOpt))
+      let formulas := lctxFormulas.append formulas
+      -- The solver is called by Aesop as a subprocedure, so the short timeout is used
+      withSolverOptions configOptions.solverShortTimeout do
+        let lemmas ← formulasWithStringsToAutoLemmas formulas.toList (includeInSetOfSupport := true)
         -- Calling `Auto.unfoldConstAndPreprocessLemma` is an essential step for the monomorphization procedure
         let lemmas ←
           tryCatchRuntimeEx
@@ -97,9 +106,9 @@ def duperSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool × S
         -- Build a Duper call using includeLCtx and each coreUserInputFact
         let stx ←
           if !coreFormulas.isEmpty && includeLCtx then
-            `(tactic| duper [*, $(coreFormulas.toArray),*] {preprocessing := full})
+            `(tactic| duper [*, $coreFormulas,*] {preprocessing := full})
           else if !coreFormulas.isEmpty && !includeLCtx then
-            `(tactic| duper [$(coreFormulas.toArray),*] {preprocessing := full})
+            `(tactic| duper [$coreFormulas,*] {preprocessing := full})
           else if coreFormulas.isEmpty && includeLCtx then
             `(tactic| duper [*] {preprocessing := full})
           else -- coreFormulas.isEmpty && !includeLCtx
@@ -116,12 +125,14 @@ def duperSingleRuleTac (formulas : List (Expr × Expr × Array Name × Bool × S
         let postGoals ← postGoals.mapM (mvarIdToSubgoal input.goal ·)
         return (postGoals, some #[step], some ⟨1.0⟩)
 
-/-- Runs `grind?` with `grind` parameters built from `grindPremiseNames`, then records the first `grind` tactic
-    that `grind?` suggests (the same suggestion the interactive `grind?` tactic would emit) as an Aesop script step. -/
-def grindSingleRuleTac (grindPremiseNames : Array Name) : SingleRuleTac := λ input => do
+/-- Runs `grind?` with `grind` parameters built from `grindPremiseNames` (retrieved from `Hammer.grindSubprocedureInputExt`), then records the
+    first `grind` tactic that `grind?` suggests (the same suggestion the interactive `grind?` tactic would emit) as an Aesop script step. -/
+def grindSingleRuleTac : SingleRuleTac := λ input => do
   let preState ← saveState
   input.goal.withContext do
     Core.checkSystem s!"{decl_name%}"
+    let some grindPremiseNames := Hammer.grindSubprocedureInputExt.getState (← getEnv)
+      | throwError "{decl_name%} :: The Grind subprocedure's input was not set (this rule is only meant to be invoked by `hammer`)"
     let grindParamStxs : TSyntaxArray `Lean.Parser.Tactic.grindParam ←
       grindPremiseNames.mapM (fun n => `(Lean.Parser.Tactic.grindParam| $(mkIdent n):ident))
     let grindQuestionStx ← `(tactic| grind? [$grindParamStxs,*])
@@ -149,7 +160,6 @@ def grindSingleRuleTac (grindPremiseNames : Array Name) : SingleRuleTac := λ in
     let postGoals ← postGoals.mapM (mvarIdToSubgoal input.goal ·)
     return (postGoals, some #[step], some ⟨1.0⟩)
 
--- The following code was written by Tomaz Mascarenhas. It is scheduled to be added to lean-smt, and once it is, it can be removed from here.
 namespace Smt
 
 -- The type and the corresponding syntax
@@ -167,9 +177,11 @@ def createArrow (es : List Expr) (e : Expr) : Expr :=
     let hd : Q(Prop) := hd
     q($hd -> $r)
 
-def smtSingleRuleTac (ps : Premises) (includeLCtx : Bool) (configOptions : HammerCore.ConfigurationOptions) : SingleRuleTac := fun input => do
+def smtSingleRuleTac : SingleRuleTac := fun input => do
   let preState ← saveState
   input.goal.withContext do
+    let some (ps, includeLCtx, configOptions) := Hammer.smtSubprocedureInputExt.getState (← getEnv)
+      | throwError "{decl_name%} :: The Lean-SMT subprocedure's input was not set (this rule is only meant to be invoked by `hammer`)"
     let g ← input.goal.getType
     let types := ps.map (fun p => p.1)
     let arrow := createArrow types g
@@ -184,7 +196,8 @@ def smtSingleRuleTac (ps : Premises) (includeLCtx : Bool) (configOptions : Hamme
           pure ((← Smt.Preprocess.getPropHyps).filter (fun fv => !hs.contains fv))
       else
         pure #[]
-    let res ← Smt.smt {mono := true, timeout := configOptions.solverTimeout} mv' (hs.map (fun fv => .fvar fv) ++ lctxHyps.map (fun fv => .fvar fv))
+    -- Lean-SMT is called by Aesop as a subprocedure, so the short timeout is used
+    let res ← Smt.smt {mono := true, timeout := configOptions.solverShortTimeout} mv' (hs.map (fun fv => .fvar fv) ++ lctxHyps.map (fun fv => .fvar fv))
     let unsat_core ←
       match res with
       | .unsat mvs uc => pure uc
@@ -204,7 +217,7 @@ def smtSingleRuleTac (ps : Premises) (includeLCtx : Bool) (configOptions : Hamme
         pure names
     let namesT ← names.mapM cast_stx
     let idents ← namesT.mapM (fun i => `(Smt.Tactic.smtHintElem| $i:term))
-    -- `cfg` doesn't include a timeout parameter because although LeanHammer's solverTimeout should be propagated to Lean-SMT for
+    -- `cfg` doesn't include a timeout parameter because although LeanHammer's solverShortTimeout should be propagated to Lean-SMT for
     -- internal calls, that timeout doesn't need to clutter the final suggestion
     let cfg ← `(optConfig| +$(mkIdent `mono))
     let stx ←

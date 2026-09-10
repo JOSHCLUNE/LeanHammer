@@ -57,7 +57,8 @@ def smtPipeline (stxRef : Syntax) (simpLemmas : Syntax.TSepArray [`Lean.Parser.T
   -- We create `cfg` and `cfgWithTimeout` because LeanHammer's internal `smt` call should include a timeout argument,
   -- but the suggestion LeanHammer produces doesn't need to include said argument
   let cfg ← `(optConfig| +$(mkIdent `mono))
-  let cfgWithTimeout ← `(optConfig| +$(mkIdent `mono) (timeout := $(Syntax.mkNatLit configOptions.solverTimeout)))
+  -- `smtPipeline` calls Lean-SMT independently as part of its own procedure, so the long timeout is used
+  let cfgWithTimeout ← `(optConfig| +$(mkIdent `mono) (timeout := $(Syntax.mkNatLit configOptions.solverLongTimeout)))
   let hints ←
     if includeLCtx then `(Smt.Tactic.smtHints| [*, $premises,*])
     else `(Smt.Tactic.smtHints| [$premises,*])
