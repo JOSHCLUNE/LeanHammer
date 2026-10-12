@@ -451,7 +451,7 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   let preprocessing ←
     match preprocessingOpt with
     | none =>
-      if disableAesop && (← getPreprocessingDefaultM) == "aesop" then pure Preprocessing.no_preprocessing
+      if disableAesop && (← getPreprocessingDefaultM) == "aesop" then pure Preprocessing.simp_all
       else elabPreprocessingDefault
     | some preprocessing => pure preprocessing
   let duperPremisesShort ←
