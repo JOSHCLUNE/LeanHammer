@@ -451,7 +451,7 @@ def parseConfigOptions (configOptionsStx : TSyntaxArray `Hammer.configOption) : 
   let preprocessing ←
     match preprocessingOpt with
     | none =>
-      if disableAesop && (← getPreprocessingDefaultM) == "aesop" then pure Preprocessing.no_preprocessing
+      if disableAesop && (← getPreprocessingDefaultM) == "aesop" then pure Preprocessing.simp_all
       else elabPreprocessingDefault
     | some preprocessing => pure preprocessing
   let duperPremisesShort ←
@@ -523,6 +523,7 @@ def withSolverOptions [Monad m] [MonadError m] [MonadWithOptions m] (solverTimeo
       let o := o.set `auto.tptp.solver.name "zipperposition"
       let o := o.set `auto.mono.ignoreNonQuasiHigherOrder true
       let o := o.set `auto.lamReif.ignoreUnusable true
+      let o := o.set `auto.mono.saturationThreshold 2048
       o.set `auto.native true
     ) x
 
@@ -531,6 +532,7 @@ def withDuperOptions [Monad m] [MonadError m] [MonadWithOptions m] (x : m α) : 
     (fun o =>
       let o := o.set `duper.ignoreUnusableFacts true
       let o := o.set `auto.lamReif.ignoreUnusable true
+      let o := o.set `auto.mono.saturationThreshold 2048
       o.set `auto.mono.ignoreNonQuasiHigherOrder true
     ) x
 
