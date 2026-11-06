@@ -162,8 +162,9 @@ def querySMTForHints (exportFacts : Array REntry) (exportInds : Array MutualIndI
     match re with
     | .valid [] t => pure t
     | _ => throwError "runAuto :: Unexpected error")
+  let laterInterp := SMT.LaterSMTInterp.ofSpecAvail (← LamReif.getLaterInfo).specAvail
   let sni : SMT.SMTNamingInfo :=
-    {tyVal := (← LamReif.getTyVal), varVal := (← LamReif.getVarVal), lamEVarTy := (← LamReif.getLamEVarTy)}
+    {tyVal := (← LamReif.getTyVal), varVal := (← LamReif.getVarVal), lamEVarTy := (← LamReif.getLamEVarTy), laterInterp}
   let ((commands, validFacts, selInfos), state) ←
     (lamFOL2SMT sni lamVarTy lamEVarTy exportLamTerms exportInds).run
   for cmd in commands do
@@ -295,19 +296,19 @@ def runAutoGetHints (lemmas : Array Lemma) (inhFacts : Array Lemma) : MetaM solv
     let (solverHints, _) ← Monomorphization.monomorphize lemmas inhFacts (@id (Reif.ReifM solverHints) do
       let s ← get
       let u ← computeMaxLevel s.facts
-      (reifMAction s.facts s.inhTys s.inds).run' {u := u})
+      (reifMAction s.facts s.inhTys s.inds).run' (← LamReif.State.init u))
     return solverHints
 where
   reifMAction
     (uvalids : Array UMonoFact) (uinhs : Array UMonoFact)
-    (minds : Array (Array SimpleIndVal)) : LamReif.ReifM solverHints := do
+    (minds : Array SimpleMutIndVal) : LamReif.ReifM solverHints := do
     let exportFacts ← LamReif.reifFacts uvalids
     let mut exportFacts := exportFacts.map (Embedding.Lam.REntry.valid [])
     let _ ← LamReif.reifInhabitations uinhs
-    let exportInds ← LamReif.reifMutInds minds
+    let indBlocks ← LamReif.reifMutInds minds
     LamReif.printValuation
     -- **Preprocessing in Verified Checker**
-    let (exportFacts', exportInds) ← LamReif.preprocess exportFacts exportInds
+    let (exportFacts', exportInds) ← LamReif.preprocess exportFacts (indBlocks.map (·.info))
     exportFacts := exportFacts'
     -- **TPTP invocation and Premise Selection**
     if auto.tptp.get (← getOptions) then
