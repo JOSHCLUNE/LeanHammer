@@ -196,8 +196,9 @@ def smtSingleRuleTac : SingleRuleTac := fun input => do
           pure ((← Smt.Preprocess.getPropHyps).filter (fun fv => !hs.contains fv))
       else
         pure #[]
-    -- Lean-SMT is called by Aesop as a subprocedure, so the short timeout is used
-    let res ← Smt.smt {mono := true, timeout := configOptions.solverShortTimeout} mv' (hs.map (fun fv => .fvar fv) ++ lctxHyps.map (fun fv => .fvar fv))
+    -- Lean-SMT is called by Aesop as a subprocedure, so the short timeout is used. To observe Lean-auto's soft ordering constraint of
+    -- putting more important/relevant premises first, we make sure that `lctxHyps` comes before `hs`.
+    let res ← Smt.smt {mono := true, timeout := configOptions.solverShortTimeout} mv' (lctxHyps.map (fun fv => .fvar fv) ++ hs.map (fun fv => .fvar fv))
     let unsat_core ←
       match res with
       | .unsat mvs uc => pure uc
