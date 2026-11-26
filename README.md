@@ -2,13 +2,13 @@
 
 LeanHammer is an automated reasoning tool for Lean that brings together multiple proof search and reconstruction techniques and combines them into one tool. The `hammer` tactic provided by LeanHammer uses a variety of techniques to search for a proof of the current goal, then constructs a suggestion for a tactic script which can replace the `hammer` invocation.
 
-There are currently versions of the hammer that are compatible with the stable versions of Lean from `v4.20.0` through `v4.35.0` (and the corresponding versions of Mathlib).
+There are currently versions of the hammer that are compatible with the stable versions of Lean from `v4.20.0` through `v4.36.0` (and the corresponding versions of Mathlib). Note that versions of LeanHammer prior to `v4.36.0` relied on an external [premise selection server](https://github.com/hanwenzhu/premise-selection), so effective use of older versions of LeanHammer may require setting up your own premise selection server. The code to do so is [here](https://github.com/hanwenzhu/lean-premise-server).
 
 Pull requests and issues are welcome.
 
 ## Adding LeanHammer to Your Project
 
-To add LeanHammer for `v4.35.0` to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
+To add LeanHammer for `v4.36.0` to an existing project with a `lakefile.toml` file, replace the Mathlib dependency in `lakefile.toml` with the following:
 
 ```toml
 [[require]]
@@ -19,11 +19,11 @@ rev = "main" # Replace this with `rev = "v4.XX.X"` to add LeanHammer for an earl
 [[require]]
 name = "mathlib"
 scope = "leanprover-community"
-rev = "v4.35.0"
+rev = "v4.36.0"
 ```
 The file `lean-toolchain` should contain the following:
 ```
-leanprover/lean4:v4.35.0
+leanprover/lean4:v4.36.0
 ```
 
 If you have a project with a `lakefile.lean` instead of `lakefile.toml`, you can use this instead:
@@ -31,7 +31,7 @@ If you have a project with a `lakefile.lean` instead of `lakefile.toml`, you can
 ```lean
 require Hammer from git "https://github.com/JOSHCLUNE/LeanHammer" @ "main"
 
-require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.35.0"
+require mathlib from git "https://github.com/leanprover-community/mathlib4.git" @ "v4.36.0"
 ```
 
 Then use `lake update` to fetch the hammer and the corresponding versions of Lean and Mathlib. This also retrieves the Zipperposition executable that comes with LeanHammer. (This executable will be stored in the existing project's `.lake` directory.) The following example should then compile without any warnings or errors:
@@ -45,35 +45,16 @@ example : True := by
 
 The first time you `import Hammer`, Lake has to build the hammer component, which takes a few minutes, but after that, you can start hammering away.
 
-If you use a version of Mathlib that differs from the most recent one, the premise selection server may have to calculate embeddings for the theorems it doesn't have. This can take a little while, but the server can use cached embeddings after that. You can test the hammer without premise selection by replacing `hammer` by `hammer {aesopPremises := 0, duperPremises := 0, grindPremises := 0, smtPremises := 0}` in the example above.
+If you use a version of Mathlib that differs from the most recent one, LeanHammer may have to calculate embeddings for the theorems it doesn't have. This can take a little while, but the calculated embeddings will be cached locally after that (prior iterations of LeanHammer used an external premise selection server but LeanHammer now performs premise selection locally). You can test the hammer without premise selection by replacing `hammer` by `hammer {aesopPremises := 0, duperPremises := 0, grindPremises := 0, smtPremises := 0}` in the example above.
 
 You are free to try to use a version of the hammer with a nearby version of Lean and Mathlib, but there are no guarantees it will work. As explained below, the hammer has several dependencies, and they break often as Lean changes. If you add the Hammer to an existing project and don't use `lake update`, you should use `lake update Hammer` to fetch the hammer and Zipperposition. You should also put the `Hammer` dependency before the `mathlib` dependency in `lakefile.toml` or `lakefile.lean`: Mathlib and LeanHammer share a dependency on `batteries`, and unless you favor Mathlib's version, you will end up recompiling Mathlib.
-
-### Notes for Mac Users
-
-**On Runtime:**
-
-As of Lean version `v4.32.0`, LeanHammer deploys multiple solvers and proof search procedures in parallel. This usually enables LeanHammer to solve more problems in less time, but Mac users may experience [a significant slowdown](https://leanprover.zulipchat.com/#narrow/channel/239415-metaprogramming-.2F-tactics/topic/Process.20Spawn.20Slowdown/with/598595799) due to how the Lean compiler spawns new processes on Mac. If you are using a Mac and finding LeanHammer to be unacceptably slow, we recommend trying to minimize your file's imports, as the slowdown scales with the size of the environment. If minimizing imports is insufficient, disabling parallelism and duper (e.g. `by hammer {parallelism := false, disableDuper := true}`) will reduce the number of processes spawned by LeanHammer.
-
-**On Zipperposition:**
-
-If you are using a Mac with an Apple silicon chip, Zipperposition may not work out of the box. To test this, try this from the top folder of your project:
-```
-.lake/packages/auto/.lake/build/zipperposition-bin-macos-big-sur.exe --version
-```
-If it doesn't successfully return the version,
-```
-softwareupdate --install-rosetta
-```
-should fix it.
 
 ## Components
 
 Currently, LeanHammer consists of/depends on the following components:
 
 - **Premise selection**
-  - A [cloud-based premise selector](https://github.com/hanwenzhu/premise-selection) developed specifically for LeanHammer
-  - A [Sine Qua Non premise selector](https://dl.acm.org/doi/10.5555/2032266.2032289) which was implemented in Lean by Kim Morrison
+  - A [local LM-based premise selector](https://github.com/chasenorman/PremiseSelection/)
 - **Translation procedure**
   - [Lean-auto](https://github.com/leanprover-community/lean-auto) which serves as an interface to translate from Lean into TPTP and SMT
 - **Automatic theorem provers**
@@ -111,23 +92,6 @@ Each of the `options` supplied to `hammer` have the form `option := value` and a
 - `aesopSmtPriority`: Can be set to any Nat between 0 and 100 (default 10). This option determines the Aesop success priority assigned to the unsafe rule that attempts to use Lean-SMT to solve the current goal.
 
 Each of these options' defaults can be changed with `set_option hammer.<option_name>Default <new default>`. For example, the command that changes the default number of premises passed to Duper from 16 to 32 is `set_option hammer.duperPremisesDefault 32`.
-
-### Premise Selection
-
-In addition to the above options, LeanHammer has a premise selection component, based on the `Lean.LibrarySuggestions` API introduced in Lean 4 core. You may also use the premise selection component individually by:
-
-```lean
-import PremiseSelection
-
-example : True := by
-  premises
-```
-
-The premise selector can be modified with the command `set_library_suggestions <myPremiseSelector>`. If no premise selector is specified by the user via this API, then LeanHammer uses the default selector `Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile`. For more information on the interpretation of this selector, as well as information on `Cloud.premiseSelector`'s caching behavior, see the [premise-selection](https://github.com/hanwenzhu/premise-selection) repository.
-
-The default premise selection server used by `Cloud.premiseSelector` hosted at `http://leanpremise.net` is intended for individual use. For heavy use cases, (e.g. performing an evaluation of `hammer` on a large number of theorems), we encourage users to use [this code](https://github.com/hanwenzhu/lean-premise-server) to host their own server which can be accessed following the instructions in [this README](https://github.com/hanwenzhu/premise-selection).
-
-To view the set of premises that are passed to LeanHammer via premise selection, use the command `set_option trace.hammer.premises true`.
 
 ### Debugging
 

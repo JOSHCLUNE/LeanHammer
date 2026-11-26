@@ -31,7 +31,7 @@ open Lean Meta Elab Tactic HammerCore Syntax LibrarySuggestions Duper Aesop Qq U
 
 syntax (name := hammer) "hammer" (ppSpace "[" (term),* "]")? (ppSpace "{"Hammer.configOption,*,?"}")? : tactic
 
-set_library_suggestions open Lean.LibrarySuggestions in Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
+set_library_suggestions open Lean.LibrarySuggestions in PremiseSelection.premiseSelector
 
 /-- The Duper subprocedure invoked by Aesop takes as input:
     - `formulas` : `Array (Expr × Expr × Array Name × Bool × String)`
@@ -325,11 +325,11 @@ def evalHammerWithArgs : Tactic
       `set_library_suggestions` after importing Hammer, then their command will override the command on line 14.
 
       For now, this is fine because the current solution yields the desired behavior.
-      `Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile` is the effective default that users can override with
-      `set_library_suggestions`. However, a comment in Lean.LibrarySuggestions.Basic (line 392 of v4.26.0) indicates that the registration
-      mechanism is likely to change in the future, and if this occurs, I may need to adjust accordingly to preserve LeanHammer's intended behavior. -/
+      `PremiseSelection.premiseSelector` is the effective default that users can override with `set_library_suggestions`. However, a comment in
+      Lean.LibrarySuggestions.Basic (line 523 of v4.36.0, the doc of `elabSetLibrarySuggestions`) indicates that the registration mechanism
+      may change in the future, and if this occurs, I may need to adjust accordingly to preserve LeanHammer's intended behavior. -/
     let selector ← getSelector
-    let defaultSelector := Cloud.premiseSelector <|> sineQuaNonSelector.intersperse currentFile
+    let defaultSelector := PremiseSelection.premiseSelector
     let selector := selector.getD defaultSelector
     let premiseSelectionStart ← IO.monoMsNow
     let premises ←
